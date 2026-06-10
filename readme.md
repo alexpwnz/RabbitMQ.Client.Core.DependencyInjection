@@ -135,7 +135,7 @@ public class CustomMessageHandler : IMessageHandler
 ```
 
 `IMessageHandler` consists of one method `Handle` that takes two parameters:
- - `MessageHandlingContext` is an object that contains consumed `BasicDeliverEventArgs` message (accessible via `.Message`) and the `AcknowledgeMessage` method that allow you to acknowledge that message manually. `AcknowledgeMessage` is safe to call multiple times from client code because the behavior of the method is idempotent, and the real ack will be sent only once.
+ - `MessageHandlingContext` is an object that contains consumed `BasicDeliverEventArgs` message (accessible via `.Message`) and methods `AcknowledgeMessage` and `RejectMessage` that allow you to acknowledge or reject (nack with requeue) that message manually. Both methods are safe to call multiple times from client code because the behavior is idempotent — the real operation will be performed only once, and acknowledge and reject are mutually exclusive (the first one wins).
  - Matching routing key for that message and the message handler.
 
 Each handler can optionally override the global prefetch count by implementing the `PrefetchCount` property from `IBaseMessageHandler`. When set to a non-null value, it overrides `RabbitMqServiceOptions.PrefetchCount` (default 15) for that handler's dedicated channel.

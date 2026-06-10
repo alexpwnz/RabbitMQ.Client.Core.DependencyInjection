@@ -178,6 +178,36 @@ public class CustomMessageHandler : IMessageHandler
 
 If `PrefetchCount` returns `null` (the default), the global value from `RabbitMqServiceOptions.PrefetchCount` is used.
 
+#### Manual message acknowledgement and rejection
+
+`MessageHandlingContext` provides two methods for manual message control:
+
+- **`AcknowledgeMessage()`** — acknowledges the message via `BasicAckAsync`. Use this when processing succeeded and the message should be removed from the queue.
+- **`RejectMessage()`** — rejects (nacks) the message with `requeue: true` via `BasicNackAsync`. Use this when processing failed and the message should be returned to the queue for re-delivery.
+
+Both methods are idempotent and mutually exclusive — only the first call has effect, subsequent calls are no-ops.
+
+```c#
+public class CustomMessageHandler : IMessageHandler
+{
+    public void Handle(MessageHandlingContext context, string matchingRoute)
+    {
+        try
+        {
+            // Process the message...
+            context.AcknowledgeMessage();
+        }
+        catch
+        {
+            // Return the message to the queue for re-delivery.
+            context.RejectMessage();
+        }
+    }
+}
+```
+
+When auto-ack is enabled (the default), the message is automatically acknowledged after the pipeline completes — unless `RejectMessage()` was called. If you call `AcknowledgeMessage()` explicitly inside the handler, the auto-ack at the end is a no-op.
+
 ### Asynchronous message handlers
 
 If you want to use an async version there is another interface `IAsyncMessageHandler`.
@@ -312,7 +342,7 @@ The message handling process is organized as follows:
 - When a message arrives on a handler's queue, the consumer's `ReceivedAsync` event fires.
 - `ConsumingService` catches the event, deserializes the event args into a `MessageHandlingContext`, and delegates it to `IMessageHandlingPipelineExecutingService`.
 - The pipeline service runs all registered middlewares and then calls the specific handler's `Handle` method.
-- After all handlers and middlewares complete, `ConsumingService` acknowledges the message.
+- After all handlers and middlewares complete, `ConsumingService` acknowledges the message — unless the handler called `RejectMessage()`, in which case the message is nack'ed with requeue and returned to the queue.
 - If any exception occurs, the message is acknowledged anyway and the library checks if it has to be re-sent. If the exchange option `RequeueFailedMessages` is `true`, a header `"re-queue-attempts"` is added and the message is sent again with a delay of `RequeueTimeoutMilliseconds` (default 200 ms). The number of attempts is configurable via `RequeueAttempts`.
 - A message that has already been re-sent will not be re-sent again (re-send happens only once per attempt cycle).
 

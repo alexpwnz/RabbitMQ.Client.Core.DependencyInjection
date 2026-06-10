@@ -10,6 +10,7 @@ All notable changes to this library will be documented in this file.
 - **Per-handler `PrefetchCount` override.** The `IBaseMessageHandler` interface now has a `ushort? PrefetchCount` property. When set to a non-null value, it overrides the global `RabbitMqServiceOptions.PrefetchCount` for that handler's channel.
 - **Global `PrefetchCount` setting.** `RabbitMqServiceOptions.PrefetchCount` (default 15) configures the consumer channel QoS for all handlers. Configurable via `appsettings.json` or programmatically.
 - **General handlers without exchange** are now bound to all consumption exchanges with per-handler channels, instead of sharing a single channel.
+- **Manual message rejection.** `MessageHandlingContext.RejectMessage()` allows handlers to nack a message with `requeue: true`, returning it to the queue. Idempotent and mutually exclusive with `AcknowledgeMessage()`.
 
 ### Changed
 

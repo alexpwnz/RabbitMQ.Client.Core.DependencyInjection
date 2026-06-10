@@ -99,11 +99,17 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Services
 
             var channel = handlerConsumer.Channel;
             Task AckAction(BasicDeliverEventArgs args) => channel.BasicAckAsync(args.DeliveryTag, false).AsTask();
-            var context = new MessageHandlingContext(eventArgs, AckAction, disableAutoAck: false);
+            Task NackAction(BasicDeliverEventArgs args) => channel.BasicNackAsync(args.DeliveryTag, false, true).AsTask();
+            var context = new MessageHandlingContext(eventArgs, AckAction, NackAction, disableAutoAck: false);
 
             var matchingRoute = FindMatchingRoute(handlerConsumer, eventArgs.RoutingKey);
 
             await _messageHandlingPipelineExecutingService.ExecuteForHandler(context, handlerConsumer.Handler, matchingRoute).ConfigureAwait(false);
+
+            if (context.AutoAckEnabled && !context.WasRejected)
+            {
+                await context.AcknowledgeMessage().ConfigureAwait(false);
+            }
 
             _loggingService.LogInformation($"Message processing finished successfully for handler {handlerConsumer.Handler.GetType().Name}.");
         }

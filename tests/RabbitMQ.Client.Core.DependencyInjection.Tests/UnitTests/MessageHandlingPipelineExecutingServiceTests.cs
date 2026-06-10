@@ -30,7 +30,7 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Tests.UnitTests
                 errorProcessingServiceMock.Object,
                 Enumerable.Empty<IMessageHandlingMiddleware>());
 
-            var context = new MessageHandlingContext(eventArgs, AckAction, false);
+            var context = new MessageHandlingContext(eventArgs, AckAction, _ => Task.CompletedTask, false);
             await service.Execute(context);
             messageHandlingServiceMock.Verify(x => x.HandleMessageReceivingEvent(It.IsAny<MessageHandlingContext>()), Times.Once);
         }
@@ -59,7 +59,7 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Tests.UnitTests
                 errorProcessingServiceMock.Object,
                 middlewares);
 
-            var context = new MessageHandlingContext(eventArgs, AckAction, false);
+            var context = new MessageHandlingContext(eventArgs, AckAction, _ => Task.CompletedTask, false);
             await service.Execute(context);
 
             messageHandlingServiceMock.Verify(x => x.HandleMessageReceivingEvent(It.IsAny<MessageHandlingContext>()), Times.Once);
@@ -95,7 +95,7 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Tests.UnitTests
                 errorProcessingServiceMock.Object,
                 middlewares);
 
-            var context = new MessageHandlingContext(eventArgs, AckAction, false);
+            var context = new MessageHandlingContext(eventArgs, AckAction, _ => Task.CompletedTask, false);
             await service.Execute(context);
 
             errorProcessingServiceMock.Verify(x => x.HandleMessageProcessingFailure(It.IsAny<MessageHandlingContext>(), exception), Times.Once);
@@ -117,7 +117,7 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Tests.UnitTests
                 errorProcessingServiceMock.Object,
                 Enumerable.Empty<IMessageHandlingMiddleware>());
 
-            var context = new MessageHandlingContext(eventArgs, AckAction, false);
+            var context = new MessageHandlingContext(eventArgs, AckAction, _ => Task.CompletedTask, false);
             await service.ExecuteForHandler(context, handlerMock.Object, "routing.key");
 
             handlerMock.Verify(x => x.Handle(context, "routing.key"), Times.Once);
@@ -137,7 +137,7 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Tests.UnitTests
                 errorProcessingServiceMock.Object,
                 Enumerable.Empty<IMessageHandlingMiddleware>());
 
-            var context = new MessageHandlingContext(eventArgs, AckAction, false);
+            var context = new MessageHandlingContext(eventArgs, AckAction, _ => Task.CompletedTask, false);
             await service.ExecuteForHandler(context, asyncHandlerMock.Object, "routing.key");
 
             asyncHandlerMock.Verify(x => x.Handle(context, "routing.key"), Times.Once);
@@ -168,7 +168,7 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Tests.UnitTests
                 errorProcessingServiceMock.Object,
                 middlewares);
 
-            var context = new MessageHandlingContext(eventArgs, AckAction, false);
+            var context = new MessageHandlingContext(eventArgs, AckAction, _ => Task.CompletedTask, false);
             await service.ExecuteForHandler(context, handlerMock.Object, "routing.key");
 
             handlerMock.Verify(x => x.Handle(context, "routing.key"), Times.Once);
@@ -203,7 +203,7 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Tests.UnitTests
                 errorProcessingServiceMock.Object,
                 middlewares);
 
-            var context = new MessageHandlingContext(eventArgs, AckAction, false);
+            var context = new MessageHandlingContext(eventArgs, AckAction, _ => Task.CompletedTask, false);
             await service.ExecuteForHandler(context, handlerMock.Object, "routing.key");
 
             errorProcessingServiceMock.Verify(x => x.HandleMessageProcessingFailure(It.IsAny<MessageHandlingContext>(), exception), Times.Once);
@@ -225,7 +225,7 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Tests.UnitTests
                 errorProcessingServiceMock.Object,
                 Enumerable.Empty<IMessageHandlingMiddleware>());
 
-            var context = new MessageHandlingContext(eventArgs, AckAction, false);
+            var context = new MessageHandlingContext(eventArgs, AckAction, _ => Task.CompletedTask, false);
             await service.ExecuteForHandler(context, unsupportedHandler, "routing.key");
 
             errorProcessingServiceMock.Verify(

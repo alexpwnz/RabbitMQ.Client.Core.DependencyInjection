@@ -10,12 +10,14 @@ namespace Examples.ManualAck.MessageHandlers
     public class CustomMessageHandler : IAsyncMessageHandler
     {
         private readonly IProducingService _producingService;
-        
+
+        public ushort? PrefetchCount => null;
+
         public CustomMessageHandler(IProducingService producingService)
         {
             _producingService = producingService;
         }
-        
+
         public async Task Handle(MessageHandlingContext context, string matchingRoute)
         {
             var properties = new BasicProperties();
