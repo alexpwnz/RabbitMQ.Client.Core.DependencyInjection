@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
+using Moq;
 using RabbitMQ.Client.Core.DependencyInjection.Configuration;
 using RabbitMQ.Client.Core.DependencyInjection.Models;
 using RabbitMQ.Client.Core.DependencyInjection.Services;
+using RabbitMQ.Client.Core.DependencyInjection.Services.Interfaces;
 using Xunit;
 
 namespace RabbitMQ.Client.Core.DependencyInjection.Tests.UnitTests
@@ -46,7 +48,8 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Tests.UnitTests
 
         private static ProducingService CreateService(IEnumerable<RabbitMqExchange> exchanges)
         {
-            return new ProducingService(exchanges);
+            var poolMock = new Mock<IChannelPool>();
+            return new ProducingService(exchanges, poolMock.Object);
         }
     }
 }

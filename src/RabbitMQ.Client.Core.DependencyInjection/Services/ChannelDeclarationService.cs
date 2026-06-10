@@ -23,6 +23,7 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Services
         private readonly IEnumerable<IMessageHandler> _messageHandlers;
         private readonly IEnumerable<IAsyncMessageHandler> _asyncMessageHandlers;
         private readonly ILoggingService _loggingService;
+        private readonly IChannelPool _channelPool;
 
         public ChannelDeclarationService(
             IProducingService producingService,
@@ -33,7 +34,8 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Services
             IEnumerable<MessageHandlerRouter> routers,
             IEnumerable<IMessageHandler> messageHandlers,
             IEnumerable<IAsyncMessageHandler> asyncMessageHandlers,
-            ILoggingService loggingService)
+            ILoggingService loggingService,
+            IChannelPool channelPool)
         {
             _producingService = producingService;
             _consumingService = consumingService;
@@ -44,6 +46,7 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Services
             _messageHandlers = messageHandlers;
             _asyncMessageHandlers = asyncMessageHandlers;
             _loggingService = loggingService;
+            _channelPool = channelPool;
         }
 
         public async Task SetConnectionInfrastructureForRabbitMqServicesAsync()
@@ -51,11 +54,20 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Services
             if (_connectionOptions.ProducerOptions != null)
             {
                 var connection = (await CreateConnectionAsync(_connectionOptions.ProducerOptions).ConfigureAwait(false)).EnsureIsNotNull();
-                var channel = await CreateChannelAsync(connection).ConfigureAwait(false);
-                await StartClientAsync(channel).ConfigureAwait(false);
+                var tempChannel = await CreateChannelAsync(connection).ConfigureAwait(false);
+                await StartClientAsync(tempChannel).ConfigureAwait(false);
+
                 var declaration = (IProducingServiceDeclaration)_producingService;
                 declaration!.UseConnection(connection);
-                declaration.UseChannel(channel);
+
+                if (_channelPool is ChannelPool pool)
+                {
+                    pool.SetConnection(connection);
+                }
+
+                await tempChannel.CloseAsync().ConfigureAwait(false);
+                tempChannel.Dispose();
+                _loggingService.LogInformation("Producer connection established. Channel pool initialized.");
             }
 
             if (_connectionOptions.ConsumerOptions != null)

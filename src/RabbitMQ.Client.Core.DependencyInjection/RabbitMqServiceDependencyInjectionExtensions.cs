@@ -117,6 +117,8 @@ namespace RabbitMQ.Client.Core.DependencyInjection
             services.TryAddSingleton<IChannelDeclarationService, ChannelDeclarationService>();
             services.TryAddSingleton<ILoggingService, LoggingService>();
             services.TryAddSingleton<ITracingService, NullTracingService>();
+            services.TryAddSingleton<IChannelPool, ChannelPool>();
+            services.Configure<ChannelPoolOptions>(options => { });
             // TODO: change to TryAdd method
             services.AddHostedService<ChannelDeclarationHostedService>();
             return services;

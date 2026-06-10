@@ -7,8 +7,6 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Services.Interfaces
     {
         IConnection? Connection { get; }
 
-        IChannel? Channel { get; }
-
         Task SendAsync<T>(T @object, string exchangeName, string routingKey) where T : class;
 
         Task SendAsync<T>(T @object, string exchangeName, string routingKey, int millisecondsDelay) where T : class;

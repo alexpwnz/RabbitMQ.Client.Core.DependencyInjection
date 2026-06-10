@@ -1,12 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using RabbitMQ.Client.Core.DependencyInjection.Exceptions;
-using RabbitMQ.Client.Core.DependencyInjection.InternalExtensions.Validation;
 using RabbitMQ.Client.Core.DependencyInjection.Models;
 using RabbitMQ.Client.Core.DependencyInjection.Services.Interfaces;
 using RabbitMQ.Client.Core.DependencyInjection.Tracing;
@@ -17,27 +15,24 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Services
     {
         public IConnection? Connection { get; private set; }
 
-        public IChannel? Channel { get; private set; }
-
+        private readonly IChannelPool _channelPool;
         private readonly IReadOnlyCollection<RabbitMqExchange> _exchanges;
         private readonly ITracingService _tracingService;
 
         private const int QueueExpirationTime = 60000;
 
-        public ProducingService(IEnumerable<RabbitMqExchange> exchanges)
-            : this(exchanges, new NullTracingService())
-        {
-        }
-
-        public ProducingService(IEnumerable<RabbitMqExchange> exchanges, ITracingService tracingService)
+        public ProducingService(
+            IEnumerable<RabbitMqExchange> exchanges,
+            IChannelPool channelPool,
+            ITracingService? tracingService = null)
         {
             _exchanges = exchanges.Where(x => x.IsProducing).ToList();
-            _tracingService = tracingService;
+            _channelPool = channelPool;
+            _tracingService = tracingService ?? new NullTracingService();
         }
 
         public void Dispose()
         {
-            Channel?.Dispose();
             Connection?.Dispose();
         }
 
@@ -46,14 +41,8 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Services
             Connection = connection;
         }
 
-        public void UseChannel(IChannel channel)
-        {
-            Channel = channel;
-        }
-
         public async Task SendAsync<T>(T @object, string exchangeName, string routingKey) where T : class
         {
-            EnsureProducingChannelIsNotNull();
             ValidateArguments(exchangeName, routingKey);
             var json = JsonConvert.SerializeObject(@object);
             var bytes = Encoding.UTF8.GetBytes(json);
@@ -63,7 +52,6 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Services
 
         public async Task SendAsync<T>(T @object, string exchangeName, string routingKey, int millisecondsDelay) where T : class
         {
-            EnsureProducingChannelIsNotNull();
             ValidateArguments(exchangeName, routingKey);
             var deadLetterExchange = GetDeadLetterExchange(exchangeName);
             var delayedQueueName = await DeclareDelayedQueueAsync(exchangeName, deadLetterExchange, routingKey, millisecondsDelay).ConfigureAwait(false);
@@ -72,7 +60,6 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Services
 
         public async Task SendJsonAsync(string json, string exchangeName, string routingKey)
         {
-            EnsureProducingChannelIsNotNull();
             ValidateArguments(exchangeName, routingKey);
             var bytes = Encoding.UTF8.GetBytes(json);
             var properties = CreateJsonProperties();
@@ -81,7 +68,6 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Services
 
         public async Task SendJsonAsync(string json, string exchangeName, string routingKey, int millisecondsDelay)
         {
-            EnsureProducingChannelIsNotNull();
             ValidateArguments(exchangeName, routingKey);
             var deadLetterExchange = GetDeadLetterExchange(exchangeName);
             var delayedQueueName = await DeclareDelayedQueueAsync(exchangeName, deadLetterExchange, routingKey, millisecondsDelay).ConfigureAwait(false);
@@ -90,7 +76,6 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Services
 
         public async Task SendStringAsync(string message, string exchangeName, string routingKey)
         {
-            EnsureProducingChannelIsNotNull();
             ValidateArguments(exchangeName, routingKey);
             var bytes = Encoding.UTF8.GetBytes(message);
             await SendAsync(bytes, CreateProperties(), exchangeName, routingKey).ConfigureAwait(false);
@@ -98,7 +83,6 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Services
 
         public async Task SendStringAsync(string message, string exchangeName, string routingKey, int millisecondsDelay)
         {
-            EnsureProducingChannelIsNotNull();
             ValidateArguments(exchangeName, routingKey);
             var deadLetterExchange = GetDeadLetterExchange(exchangeName);
             var delayedQueueName = await DeclareDelayedQueueAsync(exchangeName, deadLetterExchange, routingKey, millisecondsDelay).ConfigureAwait(false);
@@ -107,12 +91,13 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Services
 
         public async Task SendAsync(ReadOnlyMemory<byte> bytes, IBasicProperties properties, string exchangeName, string routingKey)
         {
-            EnsureProducingChannelIsNotNull();
             ValidateArguments(exchangeName, routingKey);
+            using var pooledChannel = await _channelPool.AcquireAsync().ConfigureAwait(false);
             var activity = _tracingService.StartPublishActivity(properties, exchangeName, routingKey);
             try
             {
-                await Channel!.BasicPublishAsync(exchange: exchangeName,
+                await pooledChannel.Channel.BasicPublishAsync(
+                    exchange: exchangeName,
                     routingKey: routingKey,
                     mandatory: false,
                     basicProperties: (BasicProperties)properties,
@@ -126,7 +111,6 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Services
 
         public async Task SendAsync(ReadOnlyMemory<byte> bytes, IBasicProperties properties, string exchangeName, string routingKey, int millisecondsDelay)
         {
-            EnsureProducingChannelIsNotNull();
             ValidateArguments(exchangeName, routingKey);
             var deadLetterExchange = GetDeadLetterExchange(exchangeName);
             var delayedQueueName = await DeclareDelayedQueueAsync(exchangeName, deadLetterExchange, routingKey, millisecondsDelay).ConfigureAwait(false);
@@ -146,14 +130,6 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Services
             properties.Persistent = true;
             properties.ContentType = "application/json";
             return properties;
-        }
-
-        private void EnsureProducingChannelIsNotNull()
-        {
-            if (Channel is null)
-            {
-                throw new ProducingChannelIsNullException($"Producing channel is null. Configure {nameof(IProducingService)} or full functional {nameof(IProducingService)} for producing messages");
-            }
         }
 
         internal void ValidateArguments(string exchangeName, string routingKey)
@@ -190,15 +166,17 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Services
             var delayedQueueName = $"{routingKey}.delayed.{millisecondsDelay}";
             var arguments = CreateArguments(exchange, routingKey, millisecondsDelay);
 
-            Channel.EnsureIsNotNull();
-            await Channel.QueueDeclareAsync(
+            using var pooledChannel = await _channelPool.AcquireAsync().ConfigureAwait(false);
+            var channel = pooledChannel.Channel;
+
+            await channel.QueueDeclareAsync(
                 queue: delayedQueueName,
                 durable: true,
                 exclusive: false,
                 autoDelete: false,
                 arguments: arguments).ConfigureAwait(false);
 
-            await Channel.QueueBindAsync(
+            await channel.QueueBindAsync(
                 queue: delayedQueueName,
                 exchange: deadLetterExchange,
                 routingKey: delayedQueueName).ConfigureAwait(false);
