@@ -8,11 +8,14 @@ namespace Examples.ConsumerHost
     public class CustomMessageHandler : IMessageHandler
     {
         private readonly ILogger<CustomMessageHandler> _logger;
+
+        public ushort? PrefetchCount => 5;
+
         public CustomMessageHandler(ILogger<CustomMessageHandler> logger)
         {
             _logger = logger;
         }
-        
+
         public void Handle(MessageHandlingContext context, string matchingRoute)
         {
             _logger.LogInformation($"Handling message {context.Message.GetMessage()} by routing key {matchingRoute}");

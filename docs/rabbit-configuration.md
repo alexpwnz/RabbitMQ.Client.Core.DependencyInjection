@@ -50,7 +50,8 @@ A RabbitMQ client can be configured via a configuration section located in the `
     "RequestedConnectionTimeout": 60000,
     "RequestedHeartbeat": 60,
     "InitialConnectionRetries": 5,
-    "InitialConnectionRetryTimeoutMilliseconds": 200
+    "InitialConnectionRetryTimeoutMilliseconds": 200,
+    "PrefetchCount": 15
   }
 }
 ```
@@ -69,7 +70,8 @@ A RabbitMQ connection can be configured with properties:
 - `RequestedConnectionTimeout` - timeout for connection attempts,
 - `RequestedHeartbeat` - heartbeat timeout,
 - `InitialConnectionRetries` - a number of retries which could be attempted while trying to make an initial connection,
-- `InitialConnectionRetryTimeoutMilliseconds` - timeout in milliseconds which could be used while trying to make an initial connection.
+- `InitialConnectionRetryTimeoutMilliseconds` - timeout in milliseconds which could be used while trying to make an initial connection,
+- `PrefetchCount` - consumer prefetch count (QoS) applied to all consumer channels. The default value is 15. Individual handlers can override this via the `PrefetchCount` property on `IBaseMessageHandler`.
 
 `ClientProvidedName` is optional and can be null. Options `VirtualHost`, `AutomaticRecoveryEnabled`, `TopologyRecoveryEnabled`, `RequestedConnectionTimeout`, `RequestedHeartbeat`, `InitialConnectionRetries`, `InitialConnectionRetryTimeoutMilliseconds` are set with default values, so you can leave them.
 

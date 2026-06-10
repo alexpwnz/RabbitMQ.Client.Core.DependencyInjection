@@ -11,99 +11,178 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Services
 {
     public sealed class ConsumingService : IConsumingService, IConsumingServiceDeclaration, IDisposable
     {
-        public IConnection? Connection { get; private set; }
-
-        public IChannel? Channel { get; private set; }
-
-        public AsyncEventingBasicConsumer? Consumer { get; private set; }
-
-        private bool _consumingStarted;
-
         private readonly IMessageHandlingPipelineExecutingService _messageHandlingPipelineExecutingService;
-        private readonly IEnumerable<RabbitMqExchange> _exchanges;
-
-        private IEnumerable<string> _consumerTags = new List<string>();
+        private readonly ILoggingService _loggingService;
+        private readonly List<HandlerConsumerChannel> _handlerConsumers = new();
+        private bool _consumingStarted;
+        private readonly List<string> _consumerTags = new();
 
         public ConsumingService(
             IMessageHandlingPipelineExecutingService messageHandlingPipelineExecutingService,
-            IEnumerable<RabbitMqExchange> exchanges)
+            ILoggingService loggingService)
         {
             _messageHandlingPipelineExecutingService = messageHandlingPipelineExecutingService;
-            _exchanges = exchanges;
+            _loggingService = loggingService;
         }
 
         public void Dispose()
         {
-            Channel?.Dispose();
-            Connection?.Dispose();
+            foreach (var hc in _handlerConsumers)
+            {
+                hc.Dispose();
+            }
         }
 
-        public void UseConnection(IConnection connection)
-        {
-            Connection = connection;
-        }
+        internal IReadOnlyList<HandlerConsumerChannel> HandlerConsumers => _handlerConsumers;
 
-        public void UseChannel(IChannel channel)
+        void IConsumingServiceDeclaration.AddHandlerConsumer(HandlerConsumerChannel handlerConsumer)
         {
-            Channel = channel;
-        }
-
-        public void UseConsumer(AsyncEventingBasicConsumer consumer)
-        {
-            Consumer = consumer;
+            _handlerConsumers.Add(handlerConsumer);
         }
 
         public async Task StartConsumingAsync()
         {
-            Channel.EnsureIsNotNull();
-            Consumer.EnsureIsNotNull();
-
             if (_consumingStarted)
             {
                 return;
             }
 
-            Consumer.ReceivedAsync += ConsumerOnReceived;
             _consumingStarted = true;
 
-            var consumptionExchanges = _exchanges.Where(x => x.IsConsuming);
-            var consumerTags = new List<string>();
-            foreach (var exchange in consumptionExchanges)
+            foreach (var hc in _handlerConsumers)
             {
-                foreach (var queue in exchange.Options.Queues)
-                {
-                    var tag = await Channel.BasicConsumeAsync(queue: queue.Name, autoAck: false, consumer: Consumer).ConfigureAwait(false);
-                    consumerTags.Add(tag);
-                }
+                hc.Channel.EnsureIsNotNull();
+                hc.Consumer.EnsureIsNotNull();
+
+                hc.ReceivedHandler = (sender, eventArgs) => ConsumerOnReceived(hc, eventArgs);
+                hc.Consumer.ReceivedAsync += hc.ReceivedHandler;
+
+                hc.ConsumerTag = await hc.Channel.BasicConsumeAsync(
+                    queue: hc.QueueName,
+                    autoAck: false,
+                    consumer: hc.Consumer).ConfigureAwait(false);
+
+                _consumerTags.Add(hc.ConsumerTag);
+                _loggingService.LogInformation($"Started consuming queue \"{hc.QueueName}\" for handler {hc.Handler.GetType().Name} on exchange \"{hc.Exchange}\".");
             }
-            _consumerTags = consumerTags.Distinct().ToList();
         }
 
         public async Task StopConsumingAsync()
         {
-            Channel.EnsureIsNotNull();
-            Consumer.EnsureIsNotNull();
-
             if (!_consumingStarted)
             {
                 return;
             }
 
-            Consumer.ReceivedAsync -= ConsumerOnReceived;
             _consumingStarted = false;
-            foreach (var tag in _consumerTags)
+
+            for (int i = 0; i < _handlerConsumers.Count; i++)
             {
-                await Channel.BasicCancelAsync(tag).ConfigureAwait(false);
+                var hc = _handlerConsumers[i];
+                if (hc.ReceivedHandler is not null)
+                {
+                    hc.Consumer.ReceivedAsync -= hc.ReceivedHandler;
+                    hc.ReceivedHandler = null;
+                }
+                if (i < _consumerTags.Count)
+                {
+                    await hc.Channel.BasicCancelAsync(_consumerTags[i]).ConfigureAwait(false);
+                }
             }
+
+            _consumerTags.Clear();
         }
 
-        private Task AckAction(BasicDeliverEventArgs eventArgs) => Channel.EnsureIsNotNull().BasicAckAsync(eventArgs.DeliveryTag, false).AsTask();
-
-        private async Task ConsumerOnReceived(object sender, BasicDeliverEventArgs eventArgs)
+        private async Task ConsumerOnReceived(HandlerConsumerChannel handlerConsumer, BasicDeliverEventArgs eventArgs)
         {
-            var exchangeOptions = _exchanges.FirstOrDefault(x => string.Equals(x.Name, eventArgs.Exchange)).EnsureIsNotNull().Options;
-            var context = new MessageHandlingContext(eventArgs, AckAction, exchangeOptions.DisableAutoAck);
-            await _messageHandlingPipelineExecutingService.Execute(context);
+            _loggingService.LogInformation($"A new message received with deliveryTag {eventArgs.DeliveryTag} for handler {handlerConsumer.Handler.GetType().Name}.");
+
+            var channel = handlerConsumer.Channel;
+            Task AckAction(BasicDeliverEventArgs args) => channel.BasicAckAsync(args.DeliveryTag, false).AsTask();
+            var context = new MessageHandlingContext(eventArgs, AckAction, disableAutoAck: false);
+
+            var matchingRoute = FindMatchingRoute(handlerConsumer, eventArgs.RoutingKey);
+
+            await _messageHandlingPipelineExecutingService.ExecuteForHandler(context, handlerConsumer.Handler, matchingRoute).ConfigureAwait(false);
+
+            _loggingService.LogInformation($"Message processing finished successfully for handler {handlerConsumer.Handler.GetType().Name}.");
+        }
+
+        private static string FindMatchingRoute(HandlerConsumerChannel handlerConsumer, string routingKey)
+        {
+            foreach (var pattern in handlerConsumer.RoutingKeys)
+            {
+                if (MatchRoute(pattern, routingKey))
+                {
+                    return pattern;
+                }
+            }
+
+            return routingKey;
+        }
+
+        private static bool MatchRoute(string pattern, string routingKey)
+        {
+            var patternParts = pattern.Split('.');
+            var keyParts = routingKey.Split('.');
+
+            if (patternParts.Length > keyParts.Length && !pattern.Contains("#"))
+            {
+                return false;
+            }
+
+            int pi = 0, ki = 0;
+            while (pi < patternParts.Length && ki < keyParts.Length)
+            {
+                if (patternParts[pi] == "#")
+                {
+                    if (pi == patternParts.Length - 1)
+                    {
+                        return true;
+                    }
+
+                    while (ki < keyParts.Length)
+                    {
+                        if (MatchParts(patternParts, pi + 1, keyParts, ki))
+                        {
+                            return true;
+                        }
+                        ki++;
+                    }
+                    return false;
+                }
+
+                if (patternParts[pi] != "*" && patternParts[pi] != keyParts[ki])
+                {
+                    return false;
+                }
+
+                pi++;
+                ki++;
+            }
+
+            return pi == patternParts.Length && ki == keyParts.Length;
+        }
+
+        private static bool MatchParts(string[] pattern, int pi, string[] key, int ki)
+        {
+            while (pi < pattern.Length && ki < key.Length)
+            {
+                if (pattern[pi] == "#")
+                {
+                    return MatchRoute(string.Join(".", pattern[pi..]), string.Join(".", key[ki..]));
+                }
+
+                if (pattern[pi] != "*" && pattern[pi] != key[ki])
+                {
+                    return false;
+                }
+
+                pi++;
+                ki++;
+            }
+
+            return pi == pattern.Length && ki == key.Length;
         }
     }
 }

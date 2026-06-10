@@ -26,7 +26,7 @@ public void ConfigureServices(IServiceCollection services)
 }
 ```
 
-`AddRabbitMqServices` adds `IProducingService` and `IConsumingService` (will be covered in the next section) that provide functionality of producing and consuming messages respectively. `AddExchange` configures one exchange with queue bindings that allow messages to route properly.
+`AddRabbitMqServices` adds `IProducingService` and `IConsumingService` (will be covered in the next section) that provide functionality of producing and consuming messages respectively. `IConsumingService` creates a **per-handler channel architecture**: each registered message handler gets its own dedicated RabbitMQ channel, queue, and consumer with its own prefetch count (QoS) setting. `AddExchange` configures one exchange with queue bindings that allow messages to route properly.
 An example of `appsettings.json` is two sections below. You can also configure everything manually passing an instance of the `RabbitMqExchangeOptions` class. For more information, see [rabbit-configuration](./docs/rabbit-configuration.md) and [exchange-configuration](./docs/exchange-configuration.md) documentation files.
 
 Now you can inject an instance of `IProducingService` inside anything you want (e.g. simple API controller).
@@ -92,6 +92,17 @@ You have to configure everything almost the same way as you have already done pr
 `AddExchange` method configures an exchange both for production and consumption, but in case you do not want to produce messages to that queue you can use an alternative method `AddConsumptionExchange` instead. For more detailed information about difference in exchange declarations you may want to see the [documentation](./docs/exchange-configuration.md).
 The other important part is adding custom message handlers by implementing the `IMessageHandler` interface and calling `AddMessageHandlerSingleton<T>` or `AddMessageHandlerTransient<T>` methods. `IMessageHandler` is a simple subscriber, which receives messages from a queue by selected routing key. You are allowed to set multiple message handlers for one routing key (e.g. one is writing it in a database, and the other does something with business logic).
 
+Each handler gets its **own dedicated channel, queue, and consumer** on the consuming connection. This means each handler has independent prefetch count (QoS) and one handler's processing cannot block other handlers. You can set a per-handler prefetch count override via the `PrefetchCount` property on `IBaseMessageHandler`:
+
+```c#
+public class CustomMessageHandler : IMessageHandler
+{
+    // Override global prefetch count (default 15) for just this handler.
+    public ushort? PrefetchCount => 5;
+    ...
+}
+```
+
 You can also use **pattern matching** while adding message handlers where `*` (star) can substitute for exactly one word and `#` (hash) can substitute for zero or more words.
 You are also allowed to specify the exact exchange which will be "listened" by the selected message handler with the given routing key (or a pattern).
 
@@ -124,8 +135,10 @@ public class CustomMessageHandler : IMessageHandler
 ```
 
 `IMessageHandler` consists of one method `Handle` that takes two parameters:
- - `MessageHandlingContext` is an object that contains consumed `BasicDeliverEventArgs` message and the `AcknowledgeMessage` method that allow you to acknowledge that message manually. `AcknowledgeMessage` is safe to call multiple times from client code because the behavior of the method is idempotent, and the real ack will be sent only once.
+ - `MessageHandlingContext` is an object that contains consumed `BasicDeliverEventArgs` message (accessible via `.Message`) and the `AcknowledgeMessage` method that allow you to acknowledge that message manually. `AcknowledgeMessage` is safe to call multiple times from client code because the behavior of the method is idempotent, and the real ack will be sent only once.
  - Matching routing key for that message and the message handler.
+
+Each handler can optionally override the global prefetch count by implementing the `PrefetchCount` property from `IBaseMessageHandler`. When set to a non-null value, it overrides `RabbitMqServiceOptions.PrefetchCount` (default 15) for that handler's dedicated channel.
 
 If you want to use an async version of the handler then implement your custom `IAsyncMessageHandler`.
 
@@ -186,7 +199,7 @@ If you want to ack messages manually then set `DisableAutoAck` property to `true
 
 There are also a feature that you can use in case of necessity of handling messages in batches.
 First you have to create a class that inherits a `BaseBatchMessageHandler` class.
-You have to set up values for `QueueName` and `PrefetchCount` properties. These values are responsible for the queue that will be read by the message handler, and the size of batches of messages.
+You have to set up values for `QueueName` and `PrefetchCount` properties. These values are responsible for the queue that will be read by the message handler, and the size of batches of messages. Note that `BaseBatchMessageHandler.PrefetchCount` is separate from the per-handler `PrefetchCount` on `IBaseMessageHandler` — batch handlers use their own connection, while regular handlers share the consuming connection with per-handler channels.
 
 ```c#
 public class CustomBatchMessageHandler : BaseBatchMessageHandler

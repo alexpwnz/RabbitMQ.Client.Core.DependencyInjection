@@ -3,12 +3,20 @@ using System.Threading.Tasks;
 using RabbitMQ.Client.Core.DependencyInjection.Configuration;
 using RabbitMQ.Client.Core.DependencyInjection.Exceptions;
 using RabbitMQ.Client.Core.DependencyInjection.Services;
+using RabbitMQ.Client.Core.DependencyInjection.Tests.Fixtures;
 using Xunit;
 
 namespace RabbitMQ.Client.Core.DependencyInjection.Tests.IntegrationTests
 {
-    public class RabbitMqConnectionFactoryTests
+    public class RabbitMqConnectionFactoryTests : IClassFixture<RabbitMqContainerFixture>
     {
+        private readonly RabbitMqContainerFixture _fixture;
+
+        public RabbitMqConnectionFactoryTests(RabbitMqContainerFixture fixture)
+        {
+            _fixture = fixture;
+        }
+
         [Theory]
         [InlineData(1)]
         [InlineData(5)]
@@ -97,7 +105,10 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Tests.IntegrationTests
         {
             var connectionOptions = new RabbitMqServiceOptions
             {
-                HostName = "rabbitmq",
+                HostName = _fixture.Hostname,
+                Port = _fixture.Port,
+                UserName = _fixture.Username,
+                Password = _fixture.Password,
                 InitialConnectionRetries = 1,
                 InitialConnectionRetryTimeoutMilliseconds = 20
             };
@@ -109,7 +120,10 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Tests.IntegrationTests
         {
             var connectionOptions = new RabbitMqServiceOptions
             {
-                HostName = "rabbitmq",
+                HostName = _fixture.Hostname,
+                Port = _fixture.Port,
+                UserName = _fixture.Username,
+                Password = _fixture.Password,
                 ClientProvidedName = "connectionName",
                 InitialConnectionRetries = 3,
                 InitialConnectionRetryTimeoutMilliseconds = 20
@@ -126,7 +140,8 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Tests.IntegrationTests
                 {
                     new()
                     {
-                        HostName = "rabbitmq"
+                        HostName = _fixture.Hostname,
+                        Port = _fixture.Port
                     }
                 },
                 InitialConnectionRetries = 3,
@@ -140,7 +155,10 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Tests.IntegrationTests
         {
             var connectionOptions = new RabbitMqServiceOptions
             {
-                HostNames = new List<string> { "rabbitmq" },
+                HostNames = new List<string> { _fixture.Hostname },
+                Port = _fixture.Port,
+                UserName = _fixture.Username,
+                Password = _fixture.Password,
                 InitialConnectionRetries = 3,
                 InitialConnectionRetryTimeoutMilliseconds = 20
             };
@@ -152,7 +170,10 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Tests.IntegrationTests
         {
             var connectionOptions = new RabbitMqServiceOptions
             {
-                HostNames = new List<string> { "rabbitmq" },
+                HostNames = new List<string> { _fixture.Hostname },
+                Port = _fixture.Port,
+                UserName = _fixture.Username,
+                Password = _fixture.Password,
                 ClientProvidedName = "connectionName",
                 InitialConnectionRetries = 3,
                 InitialConnectionRetryTimeoutMilliseconds = 20

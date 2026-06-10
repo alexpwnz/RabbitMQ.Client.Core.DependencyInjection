@@ -93,5 +93,11 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Configuration
         /// Timeout for initial connection opening retries.
         /// </summary>
         public int InitialConnectionRetryTimeoutMilliseconds { get; set; } = 200;
+
+        /// <summary>
+        /// Consumer prefetch count (QoS). Limits the number of unacknowledged messages on the consumer.
+        /// Only affects consumer channels. Default is 15.
+        /// </summary>
+        public ushort PrefetchCount { get; set; } = 15;
     }
 }

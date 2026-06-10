@@ -2,13 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using RabbitMQ.Client.Core.DependencyInjection.MessageHandlers;
 using RabbitMQ.Client.Core.DependencyInjection.Middlewares;
 using RabbitMQ.Client.Core.DependencyInjection.Models;
 using RabbitMQ.Client.Core.DependencyInjection.Services.Interfaces;
 
 namespace RabbitMQ.Client.Core.DependencyInjection.Services
 {
-    /// <inheritdoc/>
     public class MessageHandlingPipelineExecutingService : IMessageHandlingPipelineExecutingService
     {
         private readonly IMessageHandlingService _messageHandlingService;
@@ -25,12 +25,23 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Services
             _messageHandlingMiddlewares = messageHandlingMiddlewares;
         }
 
-        /// <inheritdoc/>
         public async Task Execute(MessageHandlingContext context)
         {
             try
             {
                 await ExecutePipeline(context).ConfigureAwait(false);
+            }
+            catch (Exception exception)
+            {
+                await ExecuteFailurePipeline(context, exception).ConfigureAwait(false);
+            }
+        }
+
+        public async Task ExecuteForHandler(MessageHandlingContext context, IBaseMessageHandler handler, string matchingRoute)
+        {
+            try
+            {
+                await ExecutePipelineForHandler(context, handler, matchingRoute).ConfigureAwait(false);
             }
             catch (Exception exception)
             {
@@ -54,6 +65,39 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Services
             }
 
             await handleFunction().ConfigureAwait(false);
+        }
+
+        private async Task ExecutePipelineForHandler(MessageHandlingContext context, IBaseMessageHandler handler, string matchingRoute)
+        {
+            if (!_messageHandlingMiddlewares.Any())
+            {
+                await ExecuteHandlerDirectly(handler, context, matchingRoute);
+                return;
+            }
+
+            Func<Task> handleFunction = async () => await ExecuteHandlerDirectly(handler, context, matchingRoute);
+            foreach (var middleware in _messageHandlingMiddlewares)
+            {
+                var previousHandleFunction = handleFunction;
+                handleFunction = async () => await middleware.Handle(context, previousHandleFunction);
+            }
+
+            await handleFunction().ConfigureAwait(false);
+        }
+
+        private static async Task ExecuteHandlerDirectly(IBaseMessageHandler handler, MessageHandlingContext context, string matchingRoute)
+        {
+            switch (handler)
+            {
+                case IMessageHandler messageHandler:
+                    messageHandler.Handle(context, matchingRoute);
+                    break;
+                case IAsyncMessageHandler asyncMessageHandler:
+                    await asyncMessageHandler.Handle(context, matchingRoute);
+                    break;
+                default:
+                    throw new NotSupportedException($"The type {handler.GetType()} of message handler is not supported.");
+            }
         }
 
         private async Task ExecuteFailurePipeline(MessageHandlingContext context, Exception exception)

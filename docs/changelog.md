@@ -2,6 +2,21 @@
 
 All notable changes to this library will be documented in this file.
 
+## [5.0.0] - 2025-06-10
+
+### Added
+
+- **Per-handler channel architecture.** Each registered message handler now gets its own dedicated RabbitMQ channel, queue, and consumer. A dedicated queue is created per handler per consumption exchange named `{FullTypeName}_{ExchangeName}_handler`.
+- **Per-handler `PrefetchCount` override.** The `IBaseMessageHandler` interface now has a `ushort? PrefetchCount` property. When set to a non-null value, it overrides the global `RabbitMqServiceOptions.PrefetchCount` for that handler's channel.
+- **Global `PrefetchCount` setting.** `RabbitMqServiceOptions.PrefetchCount` (default 15) configures the consumer channel QoS for all handlers. Configurable via `appsettings.json` or programmatically.
+- **General handlers without exchange** are now bound to all consumption exchanges with per-handler channels, instead of sharing a single channel.
+
+### Changed
+
+- **Breaking!** `IConsumingService.StartConsuming` → `StartConsumingAsync`. `StopConsuming` → `StopConsumingAsync`. Both now return `Task`.
+- **Breaking!** `IConsumingService` and `IConsumingServiceDeclaration` interfaces have changed. Removed `Connection`, `Channel`, and `Consumer` properties. Replaced declaration setup with `AddHandlerConsumer(HandlerConsumerChannel)`.
+- **Breaking!** `IMessageHandler` and `IAsyncMessageHandler` now inherit from `IBaseMessageHandler` and must implement the `PrefetchCount` property.
+
 ## [4.3.0] - 2020-10-03
 
 ### Added

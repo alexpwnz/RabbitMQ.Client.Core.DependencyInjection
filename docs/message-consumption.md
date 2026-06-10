@@ -2,8 +2,8 @@
 
 ### Starting a consumer
 
-The first step that has to be done to retrieve messages from queues is to start a consumer. This can be achieved by calling the `StartConsuming` method of `IQueueService`.
-Consumption exchanges will work only in a message-production mode if the `StartConsuming` method won't be called.
+The first step that has to be done to retrieve messages from queues is to start a consumer. This can be achieved by calling the `StartConsumingAsync` method of `IConsumingService`.
+Consumption exchanges will work only in a message-production mode if `StartConsumingAsync` won't be called.
 
 Let's say that your configuration looks like this.
 
@@ -27,40 +27,38 @@ public class Startup
 }
 ```
 
-You can register `IHostedService` and inject an instance of `IQueueService` into it.
+You can register `IHostedService` and inject an instance of `IConsumingService` into it.
 
 ```c#
 services.AddSingleton<IHostedService, ConsumingService>();
 ```
 
-Then simply call `StartConsuming` so a consumer can work in the background. There is also an option which allows you to stop consuming messages - method `StopConsuming` which you can use any time you want to pause a message consumption for any reason.
+Then simply call `StartConsumingAsync` so a consumer can work in the background. There is also an option which allows you to stop consuming messages — method `StopConsumingAsync` which you can use any time you want to pause message consumption for any reason.
 
 ```c#
 public class ConsumingService : IHostedService
 {
-    readonly IQueueService _queueService;
+    readonly IConsumingService _consumingService;
     readonly ILogger<ConsumingService> _logger;
 
     public ConsumingService(
-        IQueueService queueService,
+        IConsumingService consumingService,
         ILogger<ConsumingService> logger)
     {
-        _queueService = queueService;
+        _consumingService = consumingService;
         _logger = logger;
     }
 
-    public Task StartAsync(CancellationToken cancellationToken)
+    public async Task StartAsync(CancellationToken cancellationToken)
     {
         _logger.LogInformation("Starting consuming.");
-        _queueService.StartConsuming();
-        return Task.CompletedTask;
+        await _consumingService.StartConsumingAsync();
     }
 
-    public Task StopAsync(CancellationToken cancellationToken)
+    public async Task StopAsync(CancellationToken cancellationToken)
     {
         _logger.LogInformation("Stopping consuming.");
-        _queueService.StopConsuming();
-        return Task.CompletedTask;
+        await _consumingService.StopConsumingAsync();
     }
 }
 ```
@@ -84,41 +82,54 @@ public class Program
                 services.AddRabbitMqClient(clientConfiguration)
                     .AddExchange("ExchangeName", isConsuming: true, exchangeConfiguration);
 
-                // And add the background service.
-                services.AddHostedService<Worker>();;
+                services.AddHostedService<Worker>();
             });
 }
 
 public class Worker : BackgroundService
 {
-    readonly IQueueService _queueService;
+    readonly IConsumingService _consumingService;
 
-    public Worker(IQueueService queueService)
+    public Worker(IConsumingService consumingService)
     {
-        _queueService = queueService;
+        _consumingService = consumingService;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _queueService.StartConsuming();
+        await _consumingService.StartConsumingAsync();
     }
 }
 ```
 
 The second step is to define classes that will take responsibility of handling received messages. There are synchronous and asynchronous message handlers.
 
+### Per-handler channels architecture
+
+Each registered message handler receives its own **dedicated RabbitMQ channel, queue, and consumer**. This means:
+
+- Every handler has its own independent channel with its own prefetch count (QoS) setting.
+- A dedicated queue is created per handler per consumption exchange, named `{FullTypeName}_{ExchangeName}_handler`.
+- The handler's routing keys are used to bind this queue to the exchange.
+- Messages are dispatched directly to the handler through the middleware pipeline, bypassing runtime routing.
+
+This design ensures that one handler's prefetch behavior or processing delay does not affect other handlers.
+
+#### General handlers (without exchange)
+
+If a handler is registered without specifying an exchange, it will be bound to **all** consumption exchanges — a dedicated queue and channel will be created for each.
+
 ### Synchronous message handlers
 
-`IMessageHandler` consists of one method `Handle` that gets a message. You can deserialize that message with `BasicDeliverEventArgs` extensions (described below).
-Thus, a message handler will look like this.
+`IMessageHandler` consists of one method `Handle` that receives a `MessageHandlingContext`. You can deserialize the message with `BasicDeliverEventArgs` extensions (described below). The handler also receives the matching route string.
 
 ```c#
 public class CustomMessageHandler : IMessageHandler
 {
-    public void Handle(BasicDeliverEventArgs eventArgs, string matchingRoute)
+    public void Handle(MessageHandlingContext context, string matchingRoute)
     {
         // Do whatever you want.
-        var messageObject = eventArgs.GetPayload<YourClass>();
+        var messageObject = context.Message.GetPayload<YourClass>();
     }
 }
 ```
@@ -134,29 +145,67 @@ public class CustomMessageHandler : IMessageHandler
         _logger = logger;
     }
 
-    public void Handle(BasicDeliverEventArgs eventArgs, string matchingRoute)
+    public void Handle(MessageHandlingContext context, string matchingRoute)
     {
-        _logger.LogInformation($"I got a message {eventArgs.GetMessage()} by routing key {matchingRoute}");
+        _logger.LogInformation($"I got a message {context.Message.GetMessage()} by routing key {matchingRoute}");
     }
 }
 ```
 
+#### Per-handler PrefetchCount
+
+Every handler can optionally override the global consumer prefetch count by implementing the `PrefetchCount` property from `IBaseMessageHandler`. When set to a non-null value, it overrides `RabbitMqServiceOptions.PrefetchCount` (default 15) for that handler's dedicated channel.
+
+```c#
+public class CustomMessageHandler : IMessageHandler
+{
+    readonly ILogger<CustomMessageHandler> _logger;
+
+    // This handler will use PrefetchCount = 5 instead of the global default (15).
+    public ushort? PrefetchCount => 5;
+
+    public CustomMessageHandler(ILogger<CustomMessageHandler> logger)
+    {
+        _logger = logger;
+    }
+
+    public void Handle(MessageHandlingContext context, string matchingRoute)
+    {
+        _logger.LogInformation($"Handling message {context.Message.GetMessage()} by routing key {matchingRoute}");
+    }
+}
+```
+
+If `PrefetchCount` returns `null` (the default), the global value from `RabbitMqServiceOptions.PrefetchCount` is used.
+
 ### Asynchronous message handlers
 
-`IMessageHandler` works synchronously, but if you want to use an async version then there is another interface `IAsyncMessageHandler`.
-
+If you want to use an async version there is another interface `IAsyncMessageHandler`.
 
 ```c#
 public class CustomAsyncMessageHandler : IAsyncMessageHandler
 {
-    public async Task Handle(BasicDeliverEventArgs eventArgs, string matchingRoute)
+    public async Task Handle(MessageHandlingContext context, string matchingRoute)
     {
         // Do whatever you want asynchronously!
     }
 }
 ```
 
-So you can use async/await power inside your message handler.
+You can also set per-handler `PrefetchCount` on async handlers.
+
+```c#
+public class CustomAsyncMessageHandler : IAsyncMessageHandler
+{
+    public ushort? PrefetchCount => 10;
+
+    public async Task Handle(MessageHandlingContext context, string matchingRoute)
+    {
+        await Task.Delay(100);
+        var payload = context.Message.GetPayload<YourClass>();
+    }
+}
+```
 
 ### Message handlers registering
 
@@ -192,6 +241,8 @@ public class Startup
 ```
 
 RabbitMQ client and exchange configuration sections are not specified in this example, but covered [here](rabbit-configuration.md) and [here](exchange-configuration.md).
+
+Each registered handler gets its own dedicated channel, queue, and consumer as described in the architecture section above.
 
 Message handlers can "listen" for messages by the **specified routing key**, or a **collection of routing keys**. If it is necessary, you can also register multiple message handler at once.
 
@@ -240,7 +291,7 @@ services.AddRabbitMqClient(clientConfiguration)
     .AddMessageHandlerSingleton<OneMoreCustomMessageHandler>("first.routing.key", order: 300);
 ```
 
-The higher order value - the more important message handler is. So it the previous code snippet the `OneMoreCustomMessageHandler` will process the received message first, `AnotherCustomMessageHandler` will be the second and `CustomMessageHandler` will be the third one.
+The higher order value — the more important message handler is. So in the previous code snippet the `OneMoreCustomMessageHandler` will process the received message first, `AnotherCustomMessageHandler` will be the second and `CustomMessageHandler` will be the third one.
 
 You can also combine exchange and order configurations together!
 ```c#
@@ -255,14 +306,15 @@ services.AddRabbitMqClient(clientConfiguration)
 
 ### Workflow of message handling
 
-The message handling process organized as follows:
+The message handling process is organized as follows:
 
-- `IQueueMessage` receives a message and delegates it to `IMessageHandlingService`.
-- `IMessageHandlingService` gets a message and checks if there are any message handlers in a combined collection of `IMessageHandler` and `IAsyncMessageHandler` instances and forwards a message to them.
-- All subscribed message handlers (`IMessageHandler`, `IAsyncMessageHandler`) process the given message in a given or a default order.
-- `IMessageHandlingService` acknowledges the message by its `DeliveryTag`.
-- If any exception occurs `IMessageHandlingService` acknowledges the message anyway and checks if the message has to be re-send. If exchange option `RequeueFailedMessages` is set `true` then `IMessageHandlingService` adds a header `"re-queue-attempts"` to the message and sends it again with delay in value of `RequeueTimeoutMilliseconds` (default is 200 milliseconds). The number of attempts is configurable and re-delivery will be made that many times as the value of `RequeueAttempts` property. Mechanism of sending delayed messages covered in the message production [documentation](message-production.md).
-- If any exception occurs within handling the message that has been already re-sent that message will not be re-send again (re-send happens only once).
+- `ChannelDeclarationService` creates a dedicated RabbitMQ channel, queue, and consumer for each registered handler. A global prefetch count (`RabbitMqServiceOptions.PrefetchCount`, default 15) is applied to all consumer channels, unless a handler provides its own `PrefetchCount` override.
+- When a message arrives on a handler's queue, the consumer's `ReceivedAsync` event fires.
+- `ConsumingService` catches the event, deserializes the event args into a `MessageHandlingContext`, and delegates it to `IMessageHandlingPipelineExecutingService`.
+- The pipeline service runs all registered middlewares and then calls the specific handler's `Handle` method.
+- After all handlers and middlewares complete, `ConsumingService` acknowledges the message.
+- If any exception occurs, the message is acknowledged anyway and the library checks if it has to be re-sent. If the exchange option `RequeueFailedMessages` is `true`, a header `"re-queue-attempts"` is added and the message is sent again with a delay of `RequeueTimeoutMilliseconds` (default 200 ms). The number of attempts is configurable via `RequeueAttempts`.
+- A message that has already been re-sent will not be re-sent again (re-send happens only once per attempt cycle).
 
 ### Batch message handlers
 
@@ -320,8 +372,11 @@ There is an example of using those extensions inside a `Handle` method of `IMess
 ```c#
 public class CustomMessageHandler : IMessageHandler
 {
-    public void Handle(BasicDeliverEventArgs eventArgs, string matchingRoute)
+    public void Handle(MessageHandlingContext context, string matchingRoute)
     {
+        // Access the raw event args via context.Message.
+        var eventArgs = context.Message;
+
         // You can get string message.
         var stringifiedMessage = eventArgs.GetMessage();
 

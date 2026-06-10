@@ -1,16 +1,9 @@
-﻿using RabbitMQ.Client.Events;
+﻿using RabbitMQ.Client.Core.DependencyInjection.Models;
 
 namespace RabbitMQ.Client.Core.DependencyInjection.Services.Interfaces
 {
-    /// <summary>
-    /// ConsumingService declaration interface.
-    /// </summary>
-    internal interface IConsumingServiceDeclaration : IRabbitMqService
+    internal interface IConsumingServiceDeclaration
     {
-        /// <summary>
-        /// Specify a consumer instance that will be used by the service.
-        /// </summary>
-        /// <param name="consumer"></param>
-        void UseConsumer(AsyncEventingBasicConsumer consumer);
+        void AddHandlerConsumer(HandlerConsumerChannel handlerConsumer);
     }
 }

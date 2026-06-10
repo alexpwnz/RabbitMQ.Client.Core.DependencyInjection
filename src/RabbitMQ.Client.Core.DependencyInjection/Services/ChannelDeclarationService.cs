@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Options;
 using RabbitMQ.Client.Core.DependencyInjection.Configuration;
 using RabbitMQ.Client.Core.DependencyInjection.InternalExtensions.Validation;
+using RabbitMQ.Client.Core.DependencyInjection.MessageHandlers;
 using RabbitMQ.Client.Core.DependencyInjection.Models;
 using RabbitMQ.Client.Core.DependencyInjection.Services.Interfaces;
 using RabbitMQ.Client.Events;
@@ -18,6 +19,9 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Services
         private readonly IConsumingService _consumingService;
         private readonly IRabbitMqConnectionFactory _rabbitMqConnectionFactory;
         private readonly IEnumerable<RabbitMqExchange> _exchanges;
+        private readonly IEnumerable<MessageHandlerRouter> _routers;
+        private readonly IEnumerable<IMessageHandler> _messageHandlers;
+        private readonly IEnumerable<IAsyncMessageHandler> _asyncMessageHandlers;
         private readonly ILoggingService _loggingService;
 
         public ChannelDeclarationService(
@@ -26,6 +30,9 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Services
             IRabbitMqConnectionFactory rabbitMqConnectionFactory,
             IOptions<RabbitMqConnectionOptions> connectionOptions,
             IEnumerable<RabbitMqExchange> exchanges,
+            IEnumerable<MessageHandlerRouter> routers,
+            IEnumerable<IMessageHandler> messageHandlers,
+            IEnumerable<IAsyncMessageHandler> asyncMessageHandlers,
             ILoggingService loggingService)
         {
             _producingService = producingService;
@@ -33,6 +40,9 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Services
             _rabbitMqConnectionFactory = rabbitMqConnectionFactory;
             _connectionOptions = connectionOptions.Value;
             _exchanges = exchanges;
+            _routers = routers;
+            _messageHandlers = messageHandlers;
+            _asyncMessageHandlers = asyncMessageHandlers;
             _loggingService = loggingService;
         }
 
@@ -51,25 +61,151 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Services
             if (_connectionOptions.ConsumerOptions != null)
             {
                 var connection = (await CreateConnectionAsync(_connectionOptions.ConsumerOptions).ConfigureAwait(false)).EnsureIsNotNull();
-                var channel = await CreateChannelAsync(connection).ConfigureAwait(false);
-                await StartClientAsync(channel).ConfigureAwait(false);
-                var consumer = _rabbitMqConnectionFactory.CreateConsumer(channel);
-                var declaration = (IConsumingServiceDeclaration)_consumingService;
-                declaration.UseConnection(connection);
-                declaration.UseChannel(channel);
-                declaration.UseConsumer(consumer);
+                var tempChannel = await CreateChannelAsync(connection).ConfigureAwait(false);
+                await StartClientAsync(tempChannel).ConfigureAwait(false);
+
+                var consumerExchanges = _exchanges.Where(x => x.IsConsuming).ToList();
+                var exchangeNames = consumerExchanges.Select(x => x.Name).ToHashSet();
+
+                var exchangeRouters = _routers
+                    .Where(r => !string.IsNullOrEmpty(r.Exchange) && exchangeNames.Contains(r.Exchange))
+                    .ToList();
+
+                var generalRouters = _routers
+                    .Where(r => string.IsNullOrEmpty(r.Exchange))
+                    .ToList();
+
+                var handlerTypes = exchangeRouters.Select(r => r.Type).Distinct().ToList();
+                foreach (var handlerType in handlerTypes)
+                {
+                    var router = exchangeRouters.First(r => r.Type == handlerType);
+                    var handler = ResolveHandler(handlerType);
+                    if (handler is null)
+                    {
+                        continue;
+                    }
+
+                    var exchange = router.Exchange!;
+                    var routingKeys = router.RoutePatterns.ToList();
+                    var queueName = $"{handlerType.FullName}_{exchange}_handler";
+
+                    var exchangeOptions = consumerExchanges.FirstOrDefault(x => x.Name == exchange)?.Options;
+                    if (exchangeOptions is null)
+                    {
+                        continue;
+                    }
+
+                    await tempChannel.QueueDeclareAsync(
+                        queue: queueName,
+                        durable: exchangeOptions.Queues.FirstOrDefault()?.Durable ?? true,
+                        exclusive: false,
+                        autoDelete: false,
+                        arguments: null).ConfigureAwait(false);
+
+                    foreach (var route in routingKeys)
+                    {
+                        await tempChannel.QueueBindAsync(
+                            queue: queueName,
+                            exchange: exchange,
+                            routingKey: route).ConfigureAwait(false);
+                    }
+
+                    var channel = await CreateChannelAsync(connection, _connectionOptions.ConsumerOptions, handler.PrefetchCount).ConfigureAwait(false);
+                    var consumer = _rabbitMqConnectionFactory.CreateConsumer(channel);
+
+                    var handlerConsumer = new HandlerConsumerChannel(
+                        connection,
+                        channel,
+                        consumer,
+                        handler,
+                        queueName,
+                        exchange,
+                        routingKeys);
+
+                    ((IConsumingServiceDeclaration)_consumingService).AddHandlerConsumer(handlerConsumer);
+                    _loggingService.LogInformation($"Created per-handler channel for {handlerType.Name} on exchange \"{exchange}\" with queue \"{queueName}\".");
+                }
+
+                var generalHandlerTypes = generalRouters.Select(r => r.Type).Distinct().ToList();
+                foreach (var handlerType in generalHandlerTypes)
+                {
+                    var router = generalRouters.First(r => r.Type == handlerType);
+                    var handler = ResolveHandler(handlerType);
+                    if (handler is null)
+                    {
+                        continue;
+                    }
+
+                    var routingKeys = router.RoutePatterns.ToList();
+
+                    foreach (var consumerExchange in consumerExchanges)
+                    {
+                        var exchangeName = consumerExchange.Name;
+                        var exchangeOptions = consumerExchange.Options;
+                        var queueName = $"{handlerType.FullName}_{exchangeName}_handler";
+
+                        await tempChannel.QueueDeclareAsync(
+                            queue: queueName,
+                            durable: exchangeOptions.Queues.FirstOrDefault()?.Durable ?? true,
+                            exclusive: false,
+                            autoDelete: false,
+                            arguments: null).ConfigureAwait(false);
+
+                        foreach (var route in routingKeys)
+                        {
+                            await tempChannel.QueueBindAsync(
+                                queue: queueName,
+                                exchange: exchangeName,
+                                routingKey: route).ConfigureAwait(false);
+                        }
+
+                        var channel = await CreateChannelAsync(connection, _connectionOptions.ConsumerOptions, handler.PrefetchCount).ConfigureAwait(false);
+                        var consumer = _rabbitMqConnectionFactory.CreateConsumer(channel);
+
+                        var handlerConsumer = new HandlerConsumerChannel(
+                            connection,
+                            channel,
+                            consumer,
+                            handler,
+                            queueName,
+                            exchangeName,
+                            routingKeys);
+
+                        ((IConsumingServiceDeclaration)_consumingService).AddHandlerConsumer(handlerConsumer);
+                        _loggingService.LogInformation($"Created per-handler channel for {handlerType.Name} on exchange \"{exchangeName}\" with queue \"{queueName}\".");
+                    }
+                }
             }
+        }
+
+        private IBaseMessageHandler? ResolveHandler(Type handlerType)
+        {
+            var handler = _messageHandlers.FirstOrDefault(h => h.GetType() == handlerType) as IBaseMessageHandler;
+            if (handler is not null)
+            {
+                return handler;
+            }
+
+            handler = _asyncMessageHandlers.FirstOrDefault(h => h.GetType() == handlerType) as IBaseMessageHandler;
+            return handler;
         }
 
         private Task<IConnection?> CreateConnectionAsync(RabbitMqServiceOptions options) => _rabbitMqConnectionFactory.CreateRabbitMqConnectionAsync(options);
 
-        private async Task<IChannel> CreateChannelAsync(IConnection connection)
+        private async Task<IChannel> CreateChannelAsync(IConnection connection, RabbitMqServiceOptions? options = null, ushort? prefetchCountOverride = null)
         {
             connection.CallbackExceptionAsync += HandleConnectionCallbackException;
             connection.ConnectionRecoveryErrorAsync += HandleConnectionRecoveryError;
 
             var channel = await connection.CreateChannelAsync().ConfigureAwait(false);
             channel.CallbackExceptionAsync += HandleChannelCallbackException;
+
+            var prefetchCount = prefetchCountOverride ?? options?.PrefetchCount ?? 0;
+            if (prefetchCount > 0)
+            {
+                await channel.BasicQosAsync(0, prefetchCount, false).ConfigureAwait(false);
+            }
+
             return channel;
         }
 
