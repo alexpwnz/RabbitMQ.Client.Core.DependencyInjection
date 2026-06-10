@@ -40,10 +40,10 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Tests.IntegrationTests
             var producingService = serviceProvider.GetRequiredService<IProducingService>();
             var channelDeclarationService = serviceProvider.GetRequiredService<IChannelDeclarationService>();
 
-            channelDeclarationService.SetConnectionInfrastructureForRabbitMqServices();
-            consumingService.StartConsuming();
+            await channelDeclarationService.SetConnectionInfrastructureForRabbitMqServicesAsync();
+            await consumingService.StartConsumingAsync();
             using var resetEvent = new AutoResetEvent(false);
-            consumingService.Consumer.EnsureIsNotNull().Received += (_, _) =>
+            consumingService.Consumer.EnsureIsNotNull().ReceivedAsync += (_, _) =>
             {
                 resetEvent.Set();
                 return Task.CompletedTask;
@@ -74,10 +74,10 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Tests.IntegrationTests
             var producingService = serviceProvider.GetRequiredService<IProducingService>();
             var channelDeclarationService = serviceProvider.GetRequiredService<IChannelDeclarationService>();
 
-            channelDeclarationService.SetConnectionInfrastructureForRabbitMqServices();
-            consumingService.StartConsuming();
+            await channelDeclarationService.SetConnectionInfrastructureForRabbitMqServicesAsync();
+            await consumingService.StartConsumingAsync();
             using var resetEvent = new AutoResetEvent(false);
-            consumingService.Consumer.EnsureIsNotNull().Received += (_, _) =>
+            consumingService.Consumer.EnsureIsNotNull().ReceivedAsync += (_, _) =>
             {
                 resetEvent.Set();
                 return Task.CompletedTask;

@@ -15,39 +15,18 @@ using RabbitMQ.Client.Events;
 
 namespace RabbitMQ.Client.Core.DependencyInjection.Services
 {
-    /// <summary>
-    /// A message handler that handles messages in batches.
-    /// </summary>
     public abstract class BaseBatchMessageHandler : IHostedService, IDisposable
     {
-        /// <summary>
-        /// A connection which is in use by batch message handler.
-        /// </summary>
         public IConnection? Connection { get; private set; }
 
-        /// <summary>
-        /// A channel that has been created using the connection.
-        /// </summary>
-        public IModel? Channel { get;  private set; }
+        public IChannel? Channel { get;  private set; }
 
-        /// <summary>
-        /// Prefetch size value that can be overridden.
-        /// </summary>
         public virtual uint PrefetchSize { get; set; } = 0;
 
-        /// <summary>
-        /// Queue name which will be read by that batch message handler.
-        /// </summary>
         public abstract string QueueName { get; set; }
 
-        /// <summary>
-        /// Prefetch count value (batch size).
-        /// </summary>
         public abstract ushort PrefetchCount { get; set; }
 
-        /// <summary>
-        /// The TimeSpan period through which messages will be processing.
-        /// </summary>
         public virtual TimeSpan? MessageHandlingPeriod { get; set; }
 
         private readonly IRabbitMqConnectionFactory _rabbitMqConnectionFactory;
@@ -78,13 +57,13 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Services
             _loggingService = loggingService;
         }
 
-        public Task StartAsync(CancellationToken cancellationToken)
+        public async Task StartAsync(CancellationToken cancellationToken)
         {
             ValidateProperties();
             _loggingService.LogInformation($"Batch message handler {GetType()} has been started.");
-            Connection = _rabbitMqConnectionFactory.CreateRabbitMqConnection(_serviceOptions).EnsureIsNotNull();
-            Channel = Connection.CreateModel().EnsureIsNotNull();
-            Channel.BasicQos(PrefetchSize, PrefetchCount, false);
+            Connection = (await _rabbitMqConnectionFactory.CreateRabbitMqConnectionAsync(_serviceOptions).ConfigureAwait(false)).EnsureIsNotNull();
+            Channel = (await Connection.CreateChannelAsync().ConfigureAwait(false)).EnsureIsNotNull();
+            await Channel.BasicQosAsync(PrefetchSize, PrefetchCount, false, default).ConfigureAwait(false);
 
             if (MessageHandlingPeriod != null)
             {
@@ -92,7 +71,7 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Services
             }
 
             var consumer = _rabbitMqConnectionFactory.CreateConsumer(Channel);
-            consumer.Received += async (_, eventArgs) =>
+            consumer.ReceivedAsync += async (_, eventArgs) =>
             {
                 lock (_lock)
                 {
@@ -106,8 +85,7 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Services
                 await ProcessBatchOfMessages(cancellationToken).ConfigureAwait(false);
             };
 
-            Channel.BasicConsume(queue: QueueName, autoAck: false, consumer: consumer);
-            return Task.CompletedTask;
+            await Channel.BasicConsumeAsync(queue: QueueName, autoAck: false, consumer: consumer).ConfigureAwait(false);
         }
 
         private async Task ProcessBatchOfMessages(CancellationToken cancellationToken)
@@ -144,7 +122,7 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Services
             var messagesCollection = messages.ToList();
             await HandleMessages(messagesCollection, cancellationToken).ConfigureAwait(false);
             var latestDeliveryTag = messagesCollection.Max(x => x.DeliveryTag);
-            Channel.EnsureIsNotNull().BasicAck(latestDeliveryTag, true);
+            await Channel.EnsureIsNotNull().BasicAckAsync(latestDeliveryTag, true).ConfigureAwait(false);
         }
 
         private IList<BasicDeliverEventArgs> GetMessages()
@@ -175,12 +153,6 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Services
             }
         }
 
-        /// <summary>
-        /// Handle a batch of messages.
-        /// </summary>
-        /// <param name="messages">A collection of messages.</param>
-        /// <param name="cancellationToken">Cancellation token.</param>
-        /// <returns></returns>
         public abstract Task HandleMessages(IEnumerable<BasicDeliverEventArgs> messages, CancellationToken cancellationToken);
 
         public Task StopAsync(CancellationToken cancellationToken)

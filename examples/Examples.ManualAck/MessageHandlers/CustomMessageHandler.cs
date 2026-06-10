@@ -1,10 +1,13 @@
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using RabbitMQ.Client;
 using RabbitMQ.Client.Core.DependencyInjection.MessageHandlers;
 using RabbitMQ.Client.Core.DependencyInjection.Models;
 using RabbitMQ.Client.Core.DependencyInjection.Services.Interfaces;
 
 namespace Examples.ManualAck.MessageHandlers
 {
-    public class CustomMessageHandler : IMessageHandler
+    public class CustomMessageHandler : IAsyncMessageHandler
     {
         private readonly IProducingService _producingService;
         
@@ -13,11 +16,18 @@ namespace Examples.ManualAck.MessageHandlers
             _producingService = producingService;
         }
         
-        public void Handle(MessageHandlingContext context, string matchingRoute)
+        public async Task Handle(MessageHandlingContext context, string matchingRoute)
         {
-            // Do anything you want.
-            // E.g. send a message to the exchange with another routing key. Whatever.
-            _producingService.Send(context.Message.Body, context.Message.BasicProperties, "exchange", "other.routing.key");
+            var properties = new BasicProperties();
+            if (context.Message.BasicProperties.Headers is not null)
+            {
+                properties.Headers = new Dictionary<string, object?>();
+                foreach (var header in context.Message.BasicProperties.Headers)
+                {
+                    properties.Headers[header.Key] = header.Value;
+                }
+            }
+            await _producingService.SendAsync(context.Message.Body, properties, "exchange", "other.routing.key");
         }
     }
 }

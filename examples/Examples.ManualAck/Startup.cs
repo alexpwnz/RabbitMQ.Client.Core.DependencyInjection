@@ -44,7 +44,7 @@ namespace Examples.ManualAck
 
             services.AddRabbitMqServices(rabbitMqConfiguration)
                 .AddExchange("exchange", exchangeOptions)
-                .AddMessageHandlerTransient<CustomMessageHandler>("routing.key")
+                .AddAsyncMessageHandlerTransient<CustomMessageHandler>("routing.key")
                 .AddMessageHandlingMiddleware<CustomMessageHandlingMiddleware>();
         }
 

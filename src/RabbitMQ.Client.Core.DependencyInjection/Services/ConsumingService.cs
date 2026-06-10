@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Net;
 using System.Threading.Tasks;
 using RabbitMQ.Client.Core.DependencyInjection.InternalExtensions.Validation;
 using RabbitMQ.Client.Core.DependencyInjection.Models;
@@ -10,16 +9,12 @@ using RabbitMQ.Client.Events;
 
 namespace RabbitMQ.Client.Core.DependencyInjection.Services
 {
-    /// <inheritdoc cref="IConsumingService"/>
     public sealed class ConsumingService : IConsumingService, IConsumingServiceDeclaration, IDisposable
     {
-        /// <inheritdoc/>
         public IConnection? Connection { get; private set; }
 
-        /// <inheritdoc/>
-        public IModel? Channel { get; private set; }
+        public IChannel? Channel { get; private set; }
 
-        /// <inheritdoc/>
         public AsyncEventingBasicConsumer? Consumer { get; private set; }
 
         private bool _consumingStarted;
@@ -37,43 +32,28 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Services
             _exchanges = exchanges;
         }
 
-        /// <inheritdoc/>
         public void Dispose()
         {
-            if (Channel?.IsOpen == true)
-            {
-                Channel.Close((int)HttpStatusCode.OK, "Channel closed");
-            }
-
-            if (Connection?.IsOpen == true)
-            {
-                Connection.Close();
-            }
-
             Channel?.Dispose();
             Connection?.Dispose();
         }
 
-        /// <inheritdoc/>
         public void UseConnection(IConnection connection)
         {
             Connection = connection;
         }
 
-        /// <inheritdoc/>
-        public void UseChannel(IModel channel)
+        public void UseChannel(IChannel channel)
         {
             Channel = channel;
         }
 
-        /// <inheritdoc/>
         public void UseConsumer(AsyncEventingBasicConsumer consumer)
         {
             Consumer = consumer;
         }
 
-        /// <inheritdoc/>
-        public void StartConsuming()
+        public async Task StartConsumingAsync()
         {
             Channel.EnsureIsNotNull();
             Consumer.EnsureIsNotNull();
@@ -83,19 +63,23 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Services
                 return;
             }
 
-            Consumer.Received += ConsumerOnReceived;
+            Consumer.ReceivedAsync += ConsumerOnReceived;
             _consumingStarted = true;
 
             var consumptionExchanges = _exchanges.Where(x => x.IsConsuming);
-            _consumerTags = consumptionExchanges.SelectMany(
-                    exchange => exchange.Options.Queues.Select(
-                        queue => Channel.BasicConsume(queue: queue.Name, autoAck: false, consumer: Consumer)))
-                .Distinct()
-                .ToList();
+            var consumerTags = new List<string>();
+            foreach (var exchange in consumptionExchanges)
+            {
+                foreach (var queue in exchange.Options.Queues)
+                {
+                    var tag = await Channel.BasicConsumeAsync(queue: queue.Name, autoAck: false, consumer: Consumer).ConfigureAwait(false);
+                    consumerTags.Add(tag);
+                }
+            }
+            _consumerTags = consumerTags.Distinct().ToList();
         }
 
-        /// <inheritdoc/>
-        public void StopConsuming()
+        public async Task StopConsumingAsync()
         {
             Channel.EnsureIsNotNull();
             Consumer.EnsureIsNotNull();
@@ -105,15 +89,15 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Services
                 return;
             }
 
-            Consumer.Received -= ConsumerOnReceived;
+            Consumer.ReceivedAsync -= ConsumerOnReceived;
             _consumingStarted = false;
             foreach (var tag in _consumerTags)
             {
-                Channel.BasicCancel(tag);
+                await Channel.BasicCancelAsync(tag).ConfigureAwait(false);
             }
         }
 
-        private void AckAction(BasicDeliverEventArgs eventArgs) => Channel.EnsureIsNotNull().BasicAck(eventArgs.DeliveryTag, false);
+        private Task AckAction(BasicDeliverEventArgs eventArgs) => Channel.EnsureIsNotNull().BasicAckAsync(eventArgs.DeliveryTag, false).AsTask();
 
         private async Task ConsumerOnReceived(object sender, BasicDeliverEventArgs eventArgs)
         {

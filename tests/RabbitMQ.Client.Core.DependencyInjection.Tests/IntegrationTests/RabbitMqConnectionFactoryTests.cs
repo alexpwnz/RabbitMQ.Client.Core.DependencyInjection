@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using RabbitMQ.Client.Core.DependencyInjection.Configuration;
 using RabbitMQ.Client.Core.DependencyInjection.Exceptions;
 using RabbitMQ.Client.Core.DependencyInjection.Services;
@@ -12,7 +13,7 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Tests.IntegrationTests
         [InlineData(1)]
         [InlineData(5)]
         [InlineData(10)]
-        public void ShouldProperlyRetryCreatingInitialConnection(int retries)
+        public async Task ShouldProperlyRetryCreatingInitialConnection(int retries)
         {
             var connectionOptions = new RabbitMqServiceOptions
             {
@@ -20,14 +21,14 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Tests.IntegrationTests
                 InitialConnectionRetries = retries,
                 InitialConnectionRetryTimeoutMilliseconds = 20
             };
-            ExecuteUnsuccessfulConnectionCreationAndAssertResults(connectionOptions);
+            await ExecuteUnsuccessfulConnectionCreationAndAssertResults(connectionOptions);
         }
 
         [Theory]
         [InlineData(1)]
         [InlineData(5)]
         [InlineData(10)]
-        public void ShouldProperlyRetryCreatingInitialConnectionWithConnectionName(int retries)
+        public async Task ShouldProperlyRetryCreatingInitialConnectionWithConnectionName(int retries)
         {
             var connectionOptions = new RabbitMqServiceOptions
             {
@@ -36,14 +37,14 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Tests.IntegrationTests
                 InitialConnectionRetries = retries,
                 InitialConnectionRetryTimeoutMilliseconds = 20
             };
-            ExecuteUnsuccessfulConnectionCreationAndAssertResults(connectionOptions);
+            await ExecuteUnsuccessfulConnectionCreationAndAssertResults(connectionOptions);
         }
 
         [Theory]
         [InlineData(1)]
         [InlineData(5)]
         [InlineData(10)]
-        public void ShouldProperlyRetryCreatingInitialConnectionWithTcpEndpoints(int retries)
+        public async Task ShouldProperlyRetryCreatingInitialConnectionWithTcpEndpoints(int retries)
         {
             var connectionOptions = new RabbitMqServiceOptions
             {
@@ -57,14 +58,14 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Tests.IntegrationTests
                 InitialConnectionRetries = retries,
                 InitialConnectionRetryTimeoutMilliseconds = 20
             };
-            ExecuteUnsuccessfulConnectionCreationAndAssertResults(connectionOptions);
+            await ExecuteUnsuccessfulConnectionCreationAndAssertResults(connectionOptions);
         }
 
         [Theory]
         [InlineData(1)]
         [InlineData(5)]
         [InlineData(10)]
-        public void ShouldProperlyRetryCreatingInitialConnectionWithHostNames(int retries)
+        public async Task ShouldProperlyRetryCreatingInitialConnectionWithHostNames(int retries)
         {
             var connectionOptions = new RabbitMqServiceOptions
             {
@@ -72,14 +73,14 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Tests.IntegrationTests
                 InitialConnectionRetries = retries,
                 InitialConnectionRetryTimeoutMilliseconds = 20
             };
-            ExecuteUnsuccessfulConnectionCreationAndAssertResults(connectionOptions);
+            await ExecuteUnsuccessfulConnectionCreationAndAssertResults(connectionOptions);
         }
 
         [Theory]
         [InlineData(1)]
         [InlineData(5)]
         [InlineData(10)]
-        public void ShouldProperlyRetryCreatingInitialConnectionWithHostNamesAndNamedConnection(int retries)
+        public async Task ShouldProperlyRetryCreatingInitialConnectionWithHostNamesAndNamedConnection(int retries)
         {
             var connectionOptions = new RabbitMqServiceOptions
             {
@@ -88,11 +89,11 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Tests.IntegrationTests
                 InitialConnectionRetries = retries,
                 InitialConnectionRetryTimeoutMilliseconds = 20
             };
-            ExecuteUnsuccessfulConnectionCreationAndAssertResults(connectionOptions);
+            await ExecuteUnsuccessfulConnectionCreationAndAssertResults(connectionOptions);
         }
 
         [Fact]
-        public void ShouldProperlyCreateInitialConnection()
+        public async Task ShouldProperlyCreateInitialConnection()
         {
             var connectionOptions = new RabbitMqServiceOptions
             {
@@ -100,11 +101,11 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Tests.IntegrationTests
                 InitialConnectionRetries = 1,
                 InitialConnectionRetryTimeoutMilliseconds = 20
             };
-            ExecuteSuccessfulConnectionCreationAndAssertResults(connectionOptions);
+            await ExecuteSuccessfulConnectionCreationAndAssertResults(connectionOptions);
         }
 
         [Fact]
-        public void ShouldProperlyCreateInitialConnectionWithConnectionName()
+        public async Task ShouldProperlyCreateInitialConnectionWithConnectionName()
         {
             var connectionOptions = new RabbitMqServiceOptions
             {
@@ -113,11 +114,11 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Tests.IntegrationTests
                 InitialConnectionRetries = 3,
                 InitialConnectionRetryTimeoutMilliseconds = 20
             };
-            ExecuteSuccessfulConnectionCreationAndAssertResults(connectionOptions);
+            await ExecuteSuccessfulConnectionCreationAndAssertResults(connectionOptions);
         }
 
         [Fact]
-        public void ShouldProperlyCreateInitialConnectionWithTcpEndpoints()
+        public async Task ShouldProperlyCreateInitialConnectionWithTcpEndpoints()
         {
             var connectionOptions = new RabbitMqServiceOptions
             {
@@ -131,11 +132,11 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Tests.IntegrationTests
                 InitialConnectionRetries = 3,
                 InitialConnectionRetryTimeoutMilliseconds = 20
             };
-            ExecuteSuccessfulConnectionCreationAndAssertResults(connectionOptions);
+            await ExecuteSuccessfulConnectionCreationAndAssertResults(connectionOptions);
         }
 
         [Fact]
-        public void ShouldProperlyCreateInitialConnectionWithHostNames()
+        public async Task ShouldProperlyCreateInitialConnectionWithHostNames()
         {
             var connectionOptions = new RabbitMqServiceOptions
             {
@@ -143,11 +144,11 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Tests.IntegrationTests
                 InitialConnectionRetries = 3,
                 InitialConnectionRetryTimeoutMilliseconds = 20
             };
-            ExecuteSuccessfulConnectionCreationAndAssertResults(connectionOptions);
+            await ExecuteSuccessfulConnectionCreationAndAssertResults(connectionOptions);
         }
 
         [Fact]
-        public void ShouldProperlyCreateInitialConnectionWithHostNamesAndNamedConnection()
+        public async Task ShouldProperlyCreateInitialConnectionWithHostNamesAndNamedConnection()
         {
             var connectionOptions = new RabbitMqServiceOptions
             {
@@ -156,20 +157,20 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Tests.IntegrationTests
                 InitialConnectionRetries = 3,
                 InitialConnectionRetryTimeoutMilliseconds = 20
             };
-            ExecuteSuccessfulConnectionCreationAndAssertResults(connectionOptions);
+            await ExecuteSuccessfulConnectionCreationAndAssertResults(connectionOptions);
         }
 
-        private static void ExecuteUnsuccessfulConnectionCreationAndAssertResults(RabbitMqServiceOptions connectionOptions)
+        private static async Task ExecuteUnsuccessfulConnectionCreationAndAssertResults(RabbitMqServiceOptions connectionOptions)
         {
             var connectionFactory = new RabbitMqConnectionFactory();
-            var exception = Assert.Throws<InitialConnectionException>(() => connectionFactory.CreateRabbitMqConnection(connectionOptions));
+            var exception = await Assert.ThrowsAsync<InitialConnectionException>(() => connectionFactory.CreateRabbitMqConnectionAsync(connectionOptions));
             Assert.Equal(connectionOptions.InitialConnectionRetries, exception.NumberOfRetries);
         }
 
-        private static void ExecuteSuccessfulConnectionCreationAndAssertResults(RabbitMqServiceOptions connectionOptions)
+        private static async Task ExecuteSuccessfulConnectionCreationAndAssertResults(RabbitMqServiceOptions connectionOptions)
         {
             var connectionFactory = new RabbitMqConnectionFactory();
-            using var connection = connectionFactory.CreateRabbitMqConnection(connectionOptions);
+            await using var connection = await connectionFactory.CreateRabbitMqConnectionAsync(connectionOptions);
             Assert.True(connection.IsOpen);
         }
     }

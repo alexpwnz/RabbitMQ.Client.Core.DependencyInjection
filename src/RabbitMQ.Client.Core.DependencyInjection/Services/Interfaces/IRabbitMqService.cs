@@ -15,6 +15,6 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Services.Interfaces
         /// Specify the channel that will be used by the service.
         /// </summary>
         /// <param name="channel">channel.</param>
-        void UseChannel(IModel channel);
+        void UseChannel(IChannel channel);
     }
 }

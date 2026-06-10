@@ -1,20 +1,17 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading;
+using System.Threading.Tasks;
 using RabbitMQ.Client.Core.DependencyInjection.Configuration;
 using RabbitMQ.Client.Core.DependencyInjection.Exceptions;
 using RabbitMQ.Client.Core.DependencyInjection.Services.Interfaces;
 using RabbitMQ.Client.Events;
-using RabbitMQ.Client.Exceptions;
 
 namespace RabbitMQ.Client.Core.DependencyInjection.Services
 {
-    /// <inheritdoc/>
     public class RabbitMqConnectionFactory : IRabbitMqConnectionFactory
     {
-        /// <inheritdoc/>
-        public IConnection? CreateRabbitMqConnection(RabbitMqServiceOptions? options)
+        public async Task<IConnection?> CreateRabbitMqConnectionAsync(RabbitMqServiceOptions? options)
         {
             if (options is null)
             {
@@ -30,24 +27,22 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Services
                 AutomaticRecoveryEnabled = options.AutomaticRecoveryEnabled,
                 TopologyRecoveryEnabled = options.TopologyRecoveryEnabled,
                 RequestedConnectionTimeout = options.RequestedConnectionTimeout,
-                RequestedHeartbeat = options.RequestedHeartbeat,
-                DispatchConsumersAsync = true
+                RequestedHeartbeat = options.RequestedHeartbeat
             };
 
             if (options.TcpEndpoints.Any())
             {
-                return CreateConnectionWithTcpEndpoints(options, factory);
+                return await CreateConnectionWithTcpEndpointsAsync(options, factory).ConfigureAwait(false);
             }
 
             return string.IsNullOrEmpty(options.ClientProvidedName)
-                ? CreateConnection(options, factory)
-                : CreateNamedConnection(options, factory);
+                ? await CreateConnectionAsync(options, factory).ConfigureAwait(false)
+                : await CreateNamedConnectionAsync(options, factory).ConfigureAwait(false);
         }
 
-        /// <inheritdoc/>
-        public AsyncEventingBasicConsumer CreateConsumer(IModel channel) => new AsyncEventingBasicConsumer(channel);
+        public AsyncEventingBasicConsumer CreateConsumer(IChannel channel) => new AsyncEventingBasicConsumer(channel);
 
-        private static IConnection CreateConnectionWithTcpEndpoints(RabbitMqServiceOptions options, ConnectionFactory factory)
+        private static async Task<IConnection> CreateConnectionWithTcpEndpointsAsync(RabbitMqServiceOptions options, ConnectionFactory factory)
         {
             var clientEndpoints = new List<AmqpTcpEndpoint>();
             foreach (var endpoint in options.TcpEndpoints)
@@ -73,49 +68,49 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Services
                     clientEndpoints.Add(new AmqpTcpEndpoint(endpoint.HostName, endpoint.Port));
                 }
             }
-            return TryToCreateConnection(() => factory.CreateConnection(clientEndpoints), options.InitialConnectionRetries, options.InitialConnectionRetryTimeoutMilliseconds);
+            return await TryToCreateConnectionAsync(() => factory.CreateConnectionAsync(clientEndpoints), options.InitialConnectionRetries, options.InitialConnectionRetryTimeoutMilliseconds).ConfigureAwait(false);
         }
 
-        private static IConnection CreateNamedConnection(RabbitMqServiceOptions options, ConnectionFactory factory)
+        private static async Task<IConnection> CreateNamedConnectionAsync(RabbitMqServiceOptions options, ConnectionFactory factory)
         {
             if (options.HostNames.Any())
             {
-                return TryToCreateConnection(() => factory.CreateConnection(options.HostNames.ToList(), options.ClientProvidedName), options.InitialConnectionRetries, options.InitialConnectionRetryTimeoutMilliseconds);
+                return await TryToCreateConnectionAsync(() => factory.CreateConnectionAsync(options.HostNames.ToList(), options.ClientProvidedName), options.InitialConnectionRetries, options.InitialConnectionRetryTimeoutMilliseconds).ConfigureAwait(false);
             }
 
             factory.HostName = options.HostName;
-            return TryToCreateConnection(() => factory.CreateConnection(options.ClientProvidedName), options.InitialConnectionRetries, options.InitialConnectionRetryTimeoutMilliseconds);
+            return await TryToCreateConnectionAsync(() => factory.CreateConnectionAsync(options.ClientProvidedName), options.InitialConnectionRetries, options.InitialConnectionRetryTimeoutMilliseconds).ConfigureAwait(false);
         }
 
-        private static IConnection CreateConnection(RabbitMqServiceOptions options, ConnectionFactory factory)
+        private static async Task<IConnection> CreateConnectionAsync(RabbitMqServiceOptions options, ConnectionFactory factory)
         {
             if (options.HostNames.Any())
             {
-                return TryToCreateConnection(() => factory.CreateConnection(options.HostNames.ToList()), options.InitialConnectionRetries, options.InitialConnectionRetryTimeoutMilliseconds);
+                return await TryToCreateConnectionAsync(() => factory.CreateConnectionAsync(options.HostNames.ToList()), options.InitialConnectionRetries, options.InitialConnectionRetryTimeoutMilliseconds).ConfigureAwait(false);
             }
 
             factory.HostName = options.HostName;
-            return TryToCreateConnection(factory.CreateConnection, options.InitialConnectionRetries, options.InitialConnectionRetryTimeoutMilliseconds);
+            return await TryToCreateConnectionAsync(() => factory.CreateConnectionAsync(new List<string> { factory.HostName }), options.InitialConnectionRetries, options.InitialConnectionRetryTimeoutMilliseconds).ConfigureAwait(false);
         }
 
-        private static IConnection TryToCreateConnection(Func<IConnection> connectionFunction, int numberOfRetries, int timeoutMilliseconds)
+        private static async Task<IConnection> TryToCreateConnectionAsync(Func<Task<IConnection>> connectionFunction, int numberOfRetries, int timeoutMilliseconds)
         {
             ValidateArguments(numberOfRetries, timeoutMilliseconds);
 
             var attempts = 0;
-            BrokerUnreachableException? latestException = null;
+            Exception? latestException = null;
             while (attempts < numberOfRetries)
             {
                 try
                 {
                     if (attempts > 0)
                     {
-                        Thread.Sleep(timeoutMilliseconds);
+                        await Task.Delay(timeoutMilliseconds).ConfigureAwait(false);
                     }
 
-                    return connectionFunction();
+                    return await connectionFunction().ConfigureAwait(false);
                 }
-                catch (BrokerUnreachableException exception)
+                catch (Exception exception) when (IsConnectionException(exception))
                 {
                     attempts++;
                     latestException = exception;
@@ -126,6 +121,11 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Services
             {
                 NumberOfRetries = attempts
             };
+        }
+
+        private static bool IsConnectionException(Exception exception)
+        {
+            return true;
         }
 
         private static void ValidateArguments(int numberOfRetries, int timeoutMilliseconds)

@@ -105,6 +105,6 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Tests.UnitTests
             IEnumerable<IMessageHandlingMiddleware> middlewares) =>
             new MessageHandlingPipelineExecutingService(messageHandlingService, errorProcessingService, middlewares);
 
-        private static void AckAction(BasicDeliverEventArgs message) { }
+        private static Task AckAction(BasicDeliverEventArgs message) => Task.CompletedTask;
     }
 }

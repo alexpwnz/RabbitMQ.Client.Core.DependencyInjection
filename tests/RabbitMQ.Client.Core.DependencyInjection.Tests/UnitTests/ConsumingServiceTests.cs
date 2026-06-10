@@ -22,7 +22,7 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Tests.UnitTests
         [InlineData(25)]
         public async Task ShouldProperlyConsumeMessages(int numberOfMessages)
         {
-            var channelMock = new Mock<IModel>();
+            var channelMock = new Mock<IChannel>();
             var connectionMock = new Mock<IConnection>();
             var consumer = new AsyncEventingBasicConsumer(channelMock.Object);
 
@@ -36,29 +36,31 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Tests.UnitTests
             declaration.UseChannel(channelMock.Object);
             declaration.UseConsumer(consumer);
 
-            await consumer.HandleBasicDeliver(
+            await consumer.HandleBasicDeliverAsync(
                 "1",
                 0,
                 false,
                 exchangeName,
                 "routing,key",
                 null,
-                new ReadOnlyMemory<byte>());
+                new ReadOnlyMemory<byte>(),
+                default);
             messageHandlingPipelineExecutingServiceMock.Verify(x => x.Execute(It.IsAny<MessageHandlingContext>()), Times.Never);
 
-            consumingService.StartConsuming();
+            await consumingService.StartConsumingAsync();
 
             for (var i = 1; i <= numberOfMessages; i++)
             {
-                await consumer.HandleBasicDeliver(
-                    "1",
-                    (ulong)numberOfMessages,
-                    false,
-                    "exchange",
-                    "routing,key",
-                    null,
-                    new ReadOnlyMemory<byte>());
-            }
+                    await consumer.HandleBasicDeliverAsync(
+                        "1",
+                        (ulong)numberOfMessages,
+                        false,
+                        "exchange",
+                        "routing,key",
+                        null,
+                        new ReadOnlyMemory<byte>(),
+                        default);
+                }
 
             messageHandlingPipelineExecutingServiceMock.Verify(x => x.Execute(It.IsAny<MessageHandlingContext>()), Times.Exactly(numberOfMessages));
         }
@@ -73,7 +75,7 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Tests.UnitTests
         [InlineData(25)]
         public async Task ShouldProperlyConsumeMessagesButWithoutAutoAck(int numberOfMessages)
         {
-            var channelMock = new Mock<IModel>();
+            var channelMock = new Mock<IChannel>();
             var connectionMock = new Mock<IConnection>();
             var consumer = new AsyncEventingBasicConsumer(channelMock.Object);
 
@@ -88,28 +90,30 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Tests.UnitTests
             declaration.UseChannel(channelMock.Object);
             declaration.UseConsumer(consumer);
 
-            await consumer.HandleBasicDeliver(
+            await consumer.HandleBasicDeliverAsync(
                 "1",
                 0,
                 false,
                 exchangeName,
                 "routing,key",
                 null,
-                new ReadOnlyMemory<byte>());
+                new ReadOnlyMemory<byte>(),
+                default);
             messageHandlingPipelineExecutingServiceMock.Verify(x => x.Execute(It.IsAny<MessageHandlingContext>()), Times.Never);
 
-            consumingService.StartConsuming();
+            await consumingService.StartConsumingAsync();
 
             for (var i = 1; i <= numberOfMessages; i++)
             {
-                await consumer.HandleBasicDeliver(
+                await consumer.HandleBasicDeliverAsync(
                     "1",
                     (ulong)numberOfMessages,
                     false,
                     "exchange",
                     "routing,key",
                     null,
-                    new ReadOnlyMemory<byte>());
+                    new ReadOnlyMemory<byte>(),
+                    default);
             }
 
             messageHandlingPipelineExecutingServiceMock.Verify(x => x.Execute(It.IsAny<MessageHandlingContext>()), Times.Exactly(numberOfMessages));
@@ -124,7 +128,7 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Tests.UnitTests
         [InlineData(25)]
         public async Task ShouldProperlyStopConsumingMessages(int numberOfMessages)
         {
-            var channelMock = new Mock<IModel>();
+            var channelMock = new Mock<IChannel>();
             var connectionMock = new Mock<IConnection>();
             var consumer = new AsyncEventingBasicConsumer(channelMock.Object);
 
@@ -138,30 +142,32 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Tests.UnitTests
             declaration.UseChannel(channelMock.Object);
             declaration.UseConsumer(consumer);
 
-            consumingService.StartConsuming();
+            await consumingService.StartConsumingAsync();
             for (var i = 1; i <= numberOfMessages; i++)
             {
-                await consumer.HandleBasicDeliver(
+                await consumer.HandleBasicDeliverAsync(
                     "1",
                     (ulong)numberOfMessages,
                     false,
                     exchangeName,
                     "routing,key",
                     null,
-                    new ReadOnlyMemory<byte>());
+                    new ReadOnlyMemory<byte>(),
+                    default);
             }
 
             messageHandlingPipelineExecutingServiceMock.Verify(x => x.Execute(It.IsAny<MessageHandlingContext>()), Times.Exactly(numberOfMessages));
 
-            consumingService.StopConsuming();
-            await consumer.HandleBasicDeliver(
+            await consumingService.StopConsumingAsync();
+            await consumer.HandleBasicDeliverAsync(
                 "1",
                 0,
                 false,
                 "exchange",
                 "routing,key",
                 null,
-                new ReadOnlyMemory<byte>());
+                new ReadOnlyMemory<byte>(),
+                default);
 
             messageHandlingPipelineExecutingServiceMock.Verify(x => x.Execute(It.IsAny<MessageHandlingContext>()), Times.Exactly(numberOfMessages));
         }
