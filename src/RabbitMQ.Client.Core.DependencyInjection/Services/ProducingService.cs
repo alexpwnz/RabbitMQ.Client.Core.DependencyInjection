@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using Newtonsoft.Json;
+using System.Text.Json;
 using RabbitMQ.Client.Core.DependencyInjection.Exceptions;
 using RabbitMQ.Client.Core.DependencyInjection.Models;
 using RabbitMQ.Client.Core.DependencyInjection.Services.Interfaces;
@@ -44,7 +44,7 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Services
         public async Task SendAsync<T>(T @object, string exchangeName, string routingKey) where T : class
         {
             ValidateArguments(exchangeName, routingKey);
-            var json = JsonConvert.SerializeObject(@object);
+            var json = JsonSerializer.Serialize(@object);
             var bytes = Encoding.UTF8.GetBytes(json);
             var properties = CreateJsonProperties();
             await SendAsync(bytes, properties, exchangeName, routingKey).ConfigureAwait(false);
