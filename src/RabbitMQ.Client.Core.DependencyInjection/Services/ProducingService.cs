@@ -4,6 +4,8 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Text.Json;
+using Microsoft.Extensions.Options;
+using RabbitMQ.Client.Core.DependencyInjection.Configuration;
 using RabbitMQ.Client.Core.DependencyInjection.Exceptions;
 using RabbitMQ.Client.Core.DependencyInjection.Models;
 using RabbitMQ.Client.Core.DependencyInjection.Services.Interfaces;
@@ -18,17 +20,20 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Services
         private readonly IChannelPool _channelPool;
         private readonly IReadOnlyCollection<RabbitMqExchange> _exchanges;
         private readonly ITracingService _tracingService;
+        private readonly TimeSpan _confirmationTimeout;
 
         private const int QueueExpirationTime = 60000;
 
         public ProducingService(
             IEnumerable<RabbitMqExchange> exchanges,
             IChannelPool channelPool,
+            IOptions<ChannelPoolOptions>? poolOptions = null,
             ITracingService? tracingService = null)
         {
             _exchanges = exchanges.Where(x => x.IsProducing).ToList();
             _channelPool = channelPool;
             _tracingService = tracingService ?? new NullTracingService();
+            _confirmationTimeout = poolOptions?.Value?.PublisherConfirmationTimeout ?? TimeSpan.FromSeconds(5);
         }
 
         public void Dispose()
@@ -96,12 +101,25 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Services
             var activity = _tracingService.StartPublishActivity(properties, exchangeName, routingKey);
             try
             {
-                await pooledChannel.Channel.BasicPublishAsync(
+                var channel = pooledChannel.Channel;
+
+                ulong? sequenceNumber = null;
+                if (pooledChannel.PublisherConfirmsEnabled)
+                {
+                    sequenceNumber = await channel.GetNextPublishSequenceNumberAsync().ConfigureAwait(false);
+                }
+
+                await channel.BasicPublishAsync(
                     exchange: exchangeName,
                     routingKey: routingKey,
                     mandatory: false,
                     basicProperties: (BasicProperties)properties,
                     body: bytes).ConfigureAwait(false);
+
+                if (sequenceNumber.HasValue && _channelPool is ChannelPool pool)
+                {
+                    await pool.WaitForConfirmationAsync(channel, sequenceNumber.Value, _confirmationTimeout).ConfigureAwait(false);
+                }
             }
             finally
             {

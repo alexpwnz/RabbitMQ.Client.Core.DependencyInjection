@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
@@ -16,6 +17,7 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Services
         private IConnection? _connection;
         private readonly ChannelPoolOptions _options;
         private readonly ConcurrentBag<IChannel> _idleChannels = new();
+        private readonly ConcurrentDictionary<IChannel, ChannelConfirmTracker> _confirmTrackers = new();
         private readonly SemaphoreSlim _semaphore;
         private int _totalChannels;
         private bool _disposed;
@@ -46,23 +48,37 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Services
                     if (channel.IsOpen)
                     {
                         _logger.LogDebug("Reusing idle channel from pool. Total channels: {TotalChannels}", _totalChannels);
-                        return new PooledChannel(channel, this);
+                        return CreatePooledChannel(channel);
                     }
 
-                    channel.Dispose();
-                    Interlocked.Decrement(ref _totalChannels);
+                    RemoveChannel(channel);
                     _logger.LogWarning("Discarded closed channel from pool. Total channels: {TotalChannels}", _totalChannels);
                 }
 
                 var connection = _connection ?? throw new InvalidOperationException(
                     "Producer connection has not been configured. Ensure AddRabbitMqServices or AddRabbitMqProducer was called.");
-                var newChannel = await connection.CreateChannelAsync().ConfigureAwait(false);
+
+                IChannel newChannel;
+                if (_options.EnablePublisherConfirms)
+                {
+                    var createOptions = new CreateChannelOptions(true, true, null, null);
+                    newChannel = await connection.CreateChannelAsync(createOptions, cancellationToken).ConfigureAwait(false);
+                }
+                else
+                {
+                    newChannel = await connection.CreateChannelAsync(null, cancellationToken).ConfigureAwait(false);
+                }
 
                 newChannel.CallbackExceptionAsync += HandleChannelCallbackException;
 
+                if (_options.EnablePublisherConfirms)
+                {
+                    SetupConfirmationTracking(newChannel);
+                }
+
                 Interlocked.Increment(ref _totalChannels);
                 _logger.LogDebug("Created new channel. Total channels: {TotalChannels}", _totalChannels);
-                return new PooledChannel(newChannel, this);
+                return CreatePooledChannel(newChannel);
             }
             catch
             {
@@ -71,13 +87,32 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Services
             }
         }
 
+        internal async Task WaitForConfirmationAsync(IChannel channel, ulong sequenceNumber, TimeSpan timeout)
+        {
+            if (!_options.EnablePublisherConfirms)
+            {
+                return;
+            }
+
+            if (!_confirmTrackers.TryGetValue(channel, out var tracker))
+            {
+                return;
+            }
+
+            using var cts = new CancellationTokenSource(timeout);
+            var confirmed = await tracker.WaitAsync(sequenceNumber, cts.Token).ConfigureAwait(false);
+            if (!confirmed)
+            {
+                throw new InvalidOperationException(
+                    $"Broker rejected (nack'd) message with sequence number {sequenceNumber}.");
+            }
+        }
+
         internal void Return(IChannel channel)
         {
             if (_disposed || !channel.IsOpen)
             {
-                channel.Dispose();
-                Interlocked.Decrement(ref _totalChannels);
-                _logger.LogDebug("Disposed returned channel. Total channels: {TotalChannels}", _totalChannels);
+                RemoveChannel(channel);
             }
             else
             {
@@ -98,19 +133,39 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Services
             _disposed = true;
             while (_idleChannels.TryTake(out var channel))
             {
-                channel.Dispose();
-                Interlocked.Decrement(ref _totalChannels);
+                RemoveChannel(channel);
             }
 
             _semaphore.Dispose();
+        }
+
+        private PooledChannel CreatePooledChannel(IChannel channel)
+        {
+            return new PooledChannel(channel, this, _options.EnablePublisherConfirms);
+        }
+
+        private void SetupConfirmationTracking(IChannel channel)
+        {
+            var tracker = new ChannelConfirmTracker(channel, _logger);
+            _confirmTrackers[channel] = tracker;
+        }
+
+        private void RemoveChannel(IChannel channel)
+        {
+            if (_confirmTrackers.TryRemove(channel, out var tracker))
+            {
+                tracker.Dispose();
+            }
+
+            channel.Dispose();
+            Interlocked.Decrement(ref _totalChannels);
         }
 
         private void ClearIdleChannels()
         {
             while (_idleChannels.TryTake(out var channel))
             {
-                channel.Dispose();
-                Interlocked.Decrement(ref _totalChannels);
+                RemoveChannel(channel);
             }
         }
 
@@ -142,6 +197,121 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Services
             }
 
             return Task.CompletedTask;
+        }
+
+        private sealed class ChannelConfirmTracker : IDisposable
+        {
+            private readonly IChannel _channel;
+            private readonly ILogger _logger;
+            private readonly ConcurrentDictionary<ulong, TaskCompletionSource<bool>> _pending = new();
+            private readonly object _lock = new();
+            private bool _disposed;
+
+            public ChannelConfirmTracker(IChannel channel, ILogger logger)
+            {
+                _channel = channel;
+                _logger = logger;
+                _channel.BasicAcksAsync += HandleBasicAcks;
+                _channel.BasicNacksAsync += HandleBasicNacks;
+            }
+
+            public async Task<bool> WaitAsync(ulong sequenceNumber, CancellationToken cancellationToken)
+            {
+                var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                _pending[sequenceNumber] = tcs;
+
+                using var registration = cancellationToken.Register(() => tcs.TrySetCanceled(cancellationToken));
+
+                try
+                {
+                    return await tcs.Task.ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    _pending.TryRemove(sequenceNumber, out _);
+                    throw;
+                }
+            }
+
+            private Task HandleBasicAcks(object sender, BasicAckEventArgs @event)
+            {
+                lock (_lock)
+                {
+                    if (@event.Multiple)
+                    {
+                        foreach (var kvp in _pending)
+                        {
+                            if (kvp.Key <= @event.DeliveryTag)
+                            {
+                                if (kvp.Value.TrySetResult(true))
+                                {
+                                    _pending.TryRemove(kvp.Key, out _);
+                                }
+                            }
+                        }
+                    }
+                    else
+                    {
+                        if (_pending.TryRemove(@event.DeliveryTag, out var tcs))
+                        {
+                            tcs.TrySetResult(true);
+                        }
+                    }
+                }
+
+                return Task.CompletedTask;
+            }
+
+            private Task HandleBasicNacks(object sender, BasicNackEventArgs @event)
+            {
+                lock (_lock)
+                {
+                    if (@event.Multiple)
+                    {
+                        foreach (var kvp in _pending)
+                        {
+                            if (kvp.Key <= @event.DeliveryTag)
+                            {
+                                if (kvp.Value.TrySetResult(false))
+                                {
+                                    _pending.TryRemove(kvp.Key, out _);
+                                }
+                            }
+                        }
+                    }
+                    else
+                    {
+                        if (_pending.TryRemove(@event.DeliveryTag, out var tcs))
+                        {
+                            tcs.TrySetResult(false);
+                        }
+                    }
+                }
+
+                return Task.CompletedTask;
+            }
+
+            public void Dispose()
+            {
+                if (_disposed)
+                {
+                    return;
+                }
+
+                _disposed = true;
+                _channel.BasicAcksAsync -= HandleBasicAcks;
+                _channel.BasicNacksAsync -= HandleBasicNacks;
+
+                lock (_lock)
+                {
+                    foreach (var kvp in _pending)
+                    {
+                        kvp.Value.TrySetException(new ObjectDisposedException(nameof(ChannelConfirmTracker)));
+                    }
+
+                    _pending.Clear();
+                }
+            }
         }
     }
 }
