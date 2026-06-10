@@ -1,11 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
 using RabbitMQ.Client.Core.DependencyInjection.MessageHandlers;
 using RabbitMQ.Client.Core.DependencyInjection.Middlewares;
 using RabbitMQ.Client.Core.DependencyInjection.Models;
 using RabbitMQ.Client.Core.DependencyInjection.Services.Interfaces;
+using RabbitMQ.Client.Core.DependencyInjection.Tracing;
 
 namespace RabbitMQ.Client.Core.DependencyInjection.Services
 {
@@ -14,38 +16,65 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Services
         private readonly IMessageHandlingService _messageHandlingService;
         private readonly IErrorProcessingService _errorProcessingService;
         private readonly IEnumerable<IMessageHandlingMiddleware> _messageHandlingMiddlewares;
+        private readonly ITracingService _tracingService;
 
         public MessageHandlingPipelineExecutingService(
             IMessageHandlingService messageHandlingService,
             IErrorProcessingService errorProcessingService,
             IEnumerable<IMessageHandlingMiddleware> messageHandlingMiddlewares)
+            : this(messageHandlingService, errorProcessingService, messageHandlingMiddlewares, new NullTracingService())
+        {
+        }
+
+        public MessageHandlingPipelineExecutingService(
+            IMessageHandlingService messageHandlingService,
+            IErrorProcessingService errorProcessingService,
+            IEnumerable<IMessageHandlingMiddleware> messageHandlingMiddlewares,
+            ITracingService tracingService)
         {
             _messageHandlingService = messageHandlingService;
             _errorProcessingService = errorProcessingService;
             _messageHandlingMiddlewares = messageHandlingMiddlewares;
+            _tracingService = tracingService;
         }
 
         public async Task Execute(MessageHandlingContext context)
         {
+            var activity = _tracingService.StartConsumeActivity(context.Message);
             try
             {
-                await ExecutePipeline(context).ConfigureAwait(false);
+                try
+                {
+                    await ExecutePipeline(context).ConfigureAwait(false);
+                }
+                catch (Exception exception)
+                {
+                    await ExecuteFailurePipeline(context, exception).ConfigureAwait(false);
+                }
             }
-            catch (Exception exception)
+            finally
             {
-                await ExecuteFailurePipeline(context, exception).ConfigureAwait(false);
+                _tracingService.StopActivity(activity);
             }
         }
 
         public async Task ExecuteForHandler(MessageHandlingContext context, IBaseMessageHandler handler, string matchingRoute)
         {
+            var activity = _tracingService.StartConsumeActivity(context.Message);
             try
             {
-                await ExecutePipelineForHandler(context, handler, matchingRoute).ConfigureAwait(false);
+                try
+                {
+                    await ExecutePipelineForHandler(context, handler, matchingRoute).ConfigureAwait(false);
+                }
+                catch (Exception exception)
+                {
+                    await ExecuteFailurePipeline(context, exception).ConfigureAwait(false);
+                }
             }
-            catch (Exception exception)
+            finally
             {
-                await ExecuteFailurePipeline(context, exception).ConfigureAwait(false);
+                _tracingService.StopActivity(activity);
             }
         }
 

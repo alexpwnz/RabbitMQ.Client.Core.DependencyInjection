@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -8,6 +9,7 @@ using RabbitMQ.Client.Core.DependencyInjection.Exceptions;
 using RabbitMQ.Client.Core.DependencyInjection.InternalExtensions.Validation;
 using RabbitMQ.Client.Core.DependencyInjection.Models;
 using RabbitMQ.Client.Core.DependencyInjection.Services.Interfaces;
+using RabbitMQ.Client.Core.DependencyInjection.Tracing;
 
 namespace RabbitMQ.Client.Core.DependencyInjection.Services
 {
@@ -18,12 +20,19 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Services
         public IChannel? Channel { get; private set; }
 
         private readonly IReadOnlyCollection<RabbitMqExchange> _exchanges;
+        private readonly ITracingService _tracingService;
 
         private const int QueueExpirationTime = 60000;
 
         public ProducingService(IEnumerable<RabbitMqExchange> exchanges)
+            : this(exchanges, new NullTracingService())
+        {
+        }
+
+        public ProducingService(IEnumerable<RabbitMqExchange> exchanges, ITracingService tracingService)
         {
             _exchanges = exchanges.Where(x => x.IsProducing).ToList();
+            _tracingService = tracingService;
         }
 
         public void Dispose()
@@ -100,11 +109,19 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Services
         {
             EnsureProducingChannelIsNotNull();
             ValidateArguments(exchangeName, routingKey);
-            await Channel!.BasicPublishAsync(exchange: exchangeName,
-                routingKey: routingKey,
-                mandatory: false,
-                basicProperties: (BasicProperties)properties,
-                body: bytes).ConfigureAwait(false);
+            var activity = _tracingService.StartPublishActivity(properties, exchangeName, routingKey);
+            try
+            {
+                await Channel!.BasicPublishAsync(exchange: exchangeName,
+                    routingKey: routingKey,
+                    mandatory: false,
+                    basicProperties: (BasicProperties)properties,
+                    body: bytes).ConfigureAwait(false);
+            }
+            finally
+            {
+                _tracingService.StopActivity(activity);
+            }
         }
 
         public async Task SendAsync(ReadOnlyMemory<byte> bytes, IBasicProperties properties, string exchangeName, string routingKey, int millisecondsDelay)

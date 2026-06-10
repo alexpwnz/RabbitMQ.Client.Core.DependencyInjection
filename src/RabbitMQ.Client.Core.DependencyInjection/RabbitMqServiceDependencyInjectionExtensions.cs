@@ -6,6 +6,7 @@ using RabbitMQ.Client.Core.DependencyInjection.Configuration;
 using RabbitMQ.Client.Core.DependencyInjection.InternalExtensions;
 using RabbitMQ.Client.Core.DependencyInjection.Services;
 using RabbitMQ.Client.Core.DependencyInjection.Services.Interfaces;
+using RabbitMQ.Client.Core.DependencyInjection.Tracing;
 
 namespace RabbitMQ.Client.Core.DependencyInjection
 {
@@ -115,6 +116,7 @@ namespace RabbitMQ.Client.Core.DependencyInjection
             services.TryAddSingleton<IErrorProcessingService, ErrorProcessingService>();
             services.TryAddSingleton<IChannelDeclarationService, ChannelDeclarationService>();
             services.TryAddSingleton<ILoggingService, LoggingService>();
+            services.TryAddSingleton<ITracingService, NullTracingService>();
             // TODO: change to TryAdd method
             services.AddHostedService<ChannelDeclarationHostedService>();
             return services;
