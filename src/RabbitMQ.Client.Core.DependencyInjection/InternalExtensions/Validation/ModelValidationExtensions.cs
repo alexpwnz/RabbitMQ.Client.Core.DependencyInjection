@@ -3,9 +3,9 @@ using RabbitMQ.Client.Core.DependencyInjection.Exceptions;
 
 namespace RabbitMQ.Client.Core.DependencyInjection.InternalExtensions.Validation
 {
-    internal static class ModelValidationExtensions
+    internal static class ChannelValidationExtensions
     {
-        internal static IModel EnsureIsNotNull([NotNull]this IModel? channel)
+        internal static IChannel EnsureIsNotNull([NotNull]this IChannel? channel)
         {
             if (channel is null)
             {

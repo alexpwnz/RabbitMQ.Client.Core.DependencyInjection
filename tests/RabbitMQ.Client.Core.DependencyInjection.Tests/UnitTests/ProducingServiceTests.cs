@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
+using Moq;
 using RabbitMQ.Client.Core.DependencyInjection.Configuration;
 using RabbitMQ.Client.Core.DependencyInjection.Models;
 using RabbitMQ.Client.Core.DependencyInjection.Services;
+using RabbitMQ.Client.Core.DependencyInjection.Services.Interfaces;
 using Xunit;
 
 namespace RabbitMQ.Client.Core.DependencyInjection.Tests.UnitTests
@@ -16,7 +18,7 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Tests.UnitTests
             var service = CreateService(new[] { consumptionExchange });
             Assert.Throws<ArgumentException>(() => service.ValidateArguments("another.exchange", "routing.key"));
         }
-        
+
         [Fact]
         public void ShouldProperlyThrowExceptionWhenThereIsAnExchangeWithSameNameButWithConsumptionType()
         {
@@ -25,7 +27,7 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Tests.UnitTests
             var service = CreateService(new[] { consumptionExchange });
             Assert.Throws<ArgumentException>(() => service.ValidateArguments(exchangeName, "routing.key"));
         }
-        
+
         [Fact]
         public void ShouldProperlyValidateWhenThereIsProductionExchange()
         {
@@ -34,7 +36,7 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Tests.UnitTests
             var service = CreateService(new[] { consumptionExchange });
             service.ValidateArguments(exchangeName, "routing.key");
         }
-        
+
         [Fact]
         public void ShouldProperlyValidateWhenThereIsUiversalExchange()
         {
@@ -44,9 +46,10 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Tests.UnitTests
             service.ValidateArguments(exchangeName, "routing.key");
         }
 
-        private ProducingService CreateService(IEnumerable<RabbitMqExchange> exchanges)
+        private static ProducingService CreateService(IEnumerable<RabbitMqExchange> exchanges)
         {
-            return new ProducingService(exchanges);
+            var poolMock = new Mock<IChannelPool>();
+            return new ProducingService(exchanges, poolMock.Object);
         }
     }
 }

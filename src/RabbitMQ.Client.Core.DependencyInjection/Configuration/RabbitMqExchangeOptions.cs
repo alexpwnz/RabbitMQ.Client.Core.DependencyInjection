@@ -50,7 +50,7 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Configuration
         /// <summary>
         /// Additional arguments.
         /// </summary>
-        public IDictionary<string, object> Arguments { get; set; } = new Dictionary<string, object>();
+        public IDictionary<string, object?> Arguments { get; set; } = new Dictionary<string, object?>();
 
         /// <summary>
         /// Collection of queues bound to the exchange.

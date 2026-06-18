@@ -6,6 +6,7 @@ using RabbitMQ.Client.Core.DependencyInjection.Configuration;
 using RabbitMQ.Client.Core.DependencyInjection.InternalExtensions;
 using RabbitMQ.Client.Core.DependencyInjection.Services;
 using RabbitMQ.Client.Core.DependencyInjection.Services.Interfaces;
+using RabbitMQ.Client.Core.DependencyInjection.Tracing;
 
 namespace RabbitMQ.Client.Core.DependencyInjection
 {
@@ -91,7 +92,8 @@ namespace RabbitMQ.Client.Core.DependencyInjection
 
         private static IServiceCollection AddConsumptionStarter(this IServiceCollection services)
         {
-            services.AddHostedService<ConsumingHostedService>();
+            // TODO: change to TryAdd method
+            services.AddHostedService<ConsumptionStarterHostedService>();
             return services;
         }
 
@@ -114,6 +116,10 @@ namespace RabbitMQ.Client.Core.DependencyInjection
             services.TryAddSingleton<IErrorProcessingService, ErrorProcessingService>();
             services.TryAddSingleton<IChannelDeclarationService, ChannelDeclarationService>();
             services.TryAddSingleton<ILoggingService, LoggingService>();
+            services.TryAddSingleton<ITracingService, NullTracingService>();
+            services.TryAddSingleton<IChannelPool, ChannelPool>();
+            services.Configure<ChannelPoolOptions>(options => { });
+            // TODO: change to TryAdd method
             services.AddHostedService<ChannelDeclarationHostedService>();
             return services;
         }

@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Moq;
+using RabbitMQ.Client;
 using RabbitMQ.Client.Core.DependencyInjection.Configuration;
 using RabbitMQ.Client.Core.DependencyInjection.Middlewares;
 using RabbitMQ.Client.Core.DependencyInjection.Models;
@@ -18,7 +19,7 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Tests.UnitTests
     public class BaseBatchMessageHandlerTests
     {
         private readonly TimeSpan _globalTestsTimeout = TimeSpan.FromSeconds(60);
-        
+
         [Theory]
         [InlineData(1, 10)]
         [InlineData(5, 47)]
@@ -30,17 +31,17 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Tests.UnitTests
         {
             const string queueName = "queue.name";
 
-            var channelMock = new Mock<IModel>();
+            var channelMock = new Mock<IChannel>();
             var connectionMock = new Mock<IConnection>();
-            connectionMock.Setup(x => x.CreateModel())
-                .Returns(channelMock.Object);
+            connectionMock.Setup(x => x.CreateChannelAsync(It.IsAny<CreateChannelOptions?>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(channelMock.Object);
 
             var connectionFactoryMock = new Mock<IRabbitMqConnectionFactory>();
-            connectionFactoryMock.Setup(x => x.CreateRabbitMqConnection(It.IsAny<RabbitMqServiceOptions>()))
-                .Returns(connectionMock.Object);
+            connectionFactoryMock.Setup(x => x.CreateRabbitMqConnectionAsync(It.IsAny<RabbitMqServiceOptions>()))
+                .ReturnsAsync(connectionMock.Object);
 
             var consumer = new AsyncEventingBasicConsumer(channelMock.Object);
-            connectionFactoryMock.Setup(x => x.CreateConsumer(It.IsAny<IModel>()))
+            connectionFactoryMock.Setup(x => x.CreateConsumer(It.IsAny<IChannel>()))
                 .Returns(consumer);
 
             var callerMock = new Mock<IStubCaller>();
@@ -56,14 +57,15 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Tests.UnitTests
 
             for (var i = 0; i < numberOfMessages; i++)
             {
-                await consumer.HandleBasicDeliver(
+                await consumer.HandleBasicDeliverAsync(
                     "1",
                     (ulong)i,
                     false,
                     "exchange",
                     "routing,key",
                     null,
-                    new ReadOnlyMemory<byte>());
+                    new ReadOnlyMemory<byte>(),
+                    default);
             }
 
             var numberOfBatches = numberOfMessages / prefetchCount;
@@ -74,7 +76,7 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Tests.UnitTests
 
             await messageHandler.StopAsync(CancellationToken.None);
         }
-        
+
         [Theory]
         [InlineData(1)]
         [InlineData(5)]
@@ -88,17 +90,17 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Tests.UnitTests
             const ushort prefetchCount = 10;
             var handlingPeriod = TimeSpan.FromMilliseconds(100);
 
-            var channelMock = new Mock<IModel>();
+            var channelMock = new Mock<IChannel>();
             var connectionMock = new Mock<IConnection>();
-            connectionMock.Setup(x => x.CreateModel())
-                .Returns(channelMock.Object);
+            connectionMock.Setup(x => x.CreateChannelAsync(It.IsAny<CreateChannelOptions?>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(channelMock.Object);
 
             var connectionFactoryMock = new Mock<IRabbitMqConnectionFactory>();
-            connectionFactoryMock.Setup(x => x.CreateRabbitMqConnection(It.IsAny<RabbitMqServiceOptions>()))
-                .Returns(connectionMock.Object);
+            connectionFactoryMock.Setup(x => x.CreateRabbitMqConnectionAsync(It.IsAny<RabbitMqServiceOptions>()))
+                .ReturnsAsync(connectionMock.Object);
 
             var consumer = new AsyncEventingBasicConsumer(channelMock.Object);
-            connectionFactoryMock.Setup(x => x.CreateConsumer(It.IsAny<IModel>()))
+            connectionFactoryMock.Setup(x => x.CreateConsumer(It.IsAny<IChannel>()))
                 .Returns(consumer);
 
             using var waitHandle = new AutoResetEvent(false);
@@ -125,42 +127,43 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Tests.UnitTests
                 var upperBound = (b + 1) * smallBatchSize > numberOfMessages ? numberOfMessages : (b + 1) * smallBatchSize;
                 for (var i = lowerBound; i < upperBound; i++)
                 {
-                    await consumer.HandleBasicDeliver(
+                    await consumer.HandleBasicDeliverAsync(
                         "1",
                         (ulong)i,
                         false,
                         "exchange",
                         "routing,key",
                         null,
-                        new ReadOnlyMemory<byte>());
+                        new ReadOnlyMemory<byte>(),
+                        default);
                 }
-                
+
                 waitHandle.WaitOne(_globalTestsTimeout);
             }
 
             callerMock.Verify(x => x.EmptyCall(), Times.Exactly(numberOfSmallBatches));
             callerMock.Verify(x => x.Call(It.IsAny<ReadOnlyMemory<byte>>()), Times.Exactly(numberOfMessages));
-            
+
             await messageHandler.StopAsync(CancellationToken.None);
         }
-        
+
         [Fact]
         public async Task ShouldProperlyExecutePipeline()
         {
             const ushort prefetchCount = 5;
             const string queueName = "queue.name";
 
-            var channelMock = new Mock<IModel>();
+            var channelMock = new Mock<IChannel>();
             var connectionMock = new Mock<IConnection>();
-            connectionMock.Setup(x => x.CreateModel())
-                .Returns(channelMock.Object);
+            connectionMock.Setup(x => x.CreateChannelAsync(It.IsAny<CreateChannelOptions?>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(channelMock.Object);
 
             var connectionFactoryMock = new Mock<IRabbitMqConnectionFactory>();
-            connectionFactoryMock.Setup(x => x.CreateRabbitMqConnection(It.IsAny<RabbitMqServiceOptions>()))
-                .Returns(connectionMock.Object);
+            connectionFactoryMock.Setup(x => x.CreateRabbitMqConnectionAsync(It.IsAny<RabbitMqServiceOptions>()))
+                .ReturnsAsync(connectionMock.Object);
 
             var consumer = new AsyncEventingBasicConsumer(channelMock.Object);
-            connectionFactoryMock.Setup(x => x.CreateConsumer(It.IsAny<IModel>()))
+            connectionFactoryMock.Setup(x => x.CreateConsumer(It.IsAny<IChannel>()))
                 .Returns(consumer);
 
             var callerMock = new Mock<IStubCaller>();
@@ -169,7 +172,7 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Tests.UnitTests
             var firstMiddleware = new StubBatchMessageHandlingMiddleware(1, orderingMap);
             var secondMiddleware = new StubBatchMessageHandlingMiddleware(2, orderingMap);
             var thirdMiddleware = new StubBatchMessageHandlingMiddleware(3, orderingMap);
-            
+
             var middlewares = new List<IBatchMessageHandlingMiddleware>
             {
                 firstMiddleware,
@@ -188,21 +191,22 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Tests.UnitTests
 
             for (var i = 0; i < prefetchCount; i++)
             {
-                await consumer.HandleBasicDeliver(
+                await consumer.HandleBasicDeliverAsync(
                     "1",
                     (ulong)i,
                     false,
                     "exchange",
                     "routing,key",
                     null,
-                    new ReadOnlyMemory<byte>());
+                    new ReadOnlyMemory<byte>(),
+                    default);
             }
 
             callerMock.Verify(x => x.EmptyCall(), Times.Once);
             Assert.Equal(1, orderingMap[thirdMiddleware.Number]);
             Assert.Equal(2, orderingMap[secondMiddleware.Number]);
             Assert.Equal(3, orderingMap[firstMiddleware.Number]);
-            
+
             await messageHandler.StopAsync(CancellationToken.None);
         }
 

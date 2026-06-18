@@ -5,22 +5,18 @@ using RabbitMQ.Client.Core.DependencyInjection.Services.Interfaces;
 
 namespace RabbitMQ.Client.Core.DependencyInjection.Services
 {
-    /// <summary>
-    /// Hosted service that is responsible for starting the consumer.
-    /// </summary>
-    public class ConsumingHostedService : IHostedService
+    public class ConsumptionStarterHostedService : IHostedService
     {
         private readonly IConsumingService _consumingService;
-        
-        public ConsumingHostedService(IConsumingService consumingService)
+
+        public ConsumptionStarterHostedService(IConsumingService consumingService)
         {
             _consumingService = consumingService;
         }
 
-        public Task StartAsync(CancellationToken cancellationToken)
+        public async Task StartAsync(CancellationToken cancellationToken)
         {
-            _consumingService.StartConsuming();
-            return Task.CompletedTask;
+            await _consumingService.StartConsumingAsync().ConfigureAwait(false);
         }
 
         public Task StopAsync(CancellationToken cancellationToken)

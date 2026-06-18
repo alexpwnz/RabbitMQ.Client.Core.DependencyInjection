@@ -8,7 +8,6 @@ using RabbitMQ.Client.Events;
 
 namespace RabbitMQ.Client.Core.DependencyInjection.Services
 {
-    /// <inheritdoc />
     public class ErrorProcessingService : IErrorProcessingService
     {
         private readonly IProducingService _producingService;
@@ -25,13 +24,12 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Services
             _loggingService = loggingService;
         }
 
-        /// <inheritdoc />
         public virtual async Task HandleMessageProcessingFailure(MessageHandlingContext context, Exception exception)
         {
             var eventArgs = context.Message;
             if (context.AutoAckEnabled)
             {
-                context.AcknowledgeMessage();
+                await context.AcknowledgeMessage().ConfigureAwait(false);
             }
 
             _loggingService.LogError(exception, $"An error occurred while processing received message with the delivery tag {eventArgs.DeliveryTag}.");
@@ -71,23 +69,33 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Services
                 return;
             }
 
-            if (eventArgs.BasicProperties.Headers is null)
+            var properties = new BasicProperties();
+            if (eventArgs.BasicProperties.Headers is not null)
             {
-                eventArgs.BasicProperties.Headers = new Dictionary<string, object>();
+                foreach (var header in eventArgs.BasicProperties.Headers)
+                {
+                    properties.Headers ??= new Dictionary<string, object?>();
+                    properties.Headers[header.Key] = header.Value;
+                }
             }
 
-            if (!eventArgs.BasicProperties.Headers.ContainsKey("re-queue-attempts"))
+            if (properties.Headers is null)
             {
-                eventArgs.BasicProperties.Headers.Add("re-queue-attempts", 1);
-                await RequeueMessage(eventArgs, exchange.Options.RequeueTimeoutMilliseconds);
+                properties.Headers = new Dictionary<string, object?>();
+            }
+
+            if (!properties.Headers.ContainsKey("re-queue-attempts"))
+            {
+                properties.Headers.Add("re-queue-attempts", 1);
+                await RequeueMessage(eventArgs, properties, exchange.Options.RequeueTimeoutMilliseconds);
                 return;
             }
             
-            var currentAttempt = (int)eventArgs.BasicProperties.Headers["re-queue-attempts"];
+            var currentAttempt = (int)properties.Headers["re-queue-attempts"]!;
             if (currentAttempt < exchange.Options.RequeueAttempts)
             {
-                eventArgs.BasicProperties.Headers["re-queue-attempts"] = currentAttempt + 1;
-                await RequeueMessage(eventArgs, exchange.Options.RequeueTimeoutMilliseconds);
+                properties.Headers["re-queue-attempts"] = currentAttempt + 1;
+                await RequeueMessage(eventArgs, properties, exchange.Options.RequeueTimeoutMilliseconds);
             }
             else
             {
@@ -95,9 +103,9 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Services
             }
         }
         
-        protected async Task RequeueMessage(BasicDeliverEventArgs eventArgs, int timeoutMilliseconds)
+        protected async Task RequeueMessage(BasicDeliverEventArgs eventArgs, BasicProperties properties, int timeoutMilliseconds)
         {
-            await _producingService.SendAsync(eventArgs.Body, eventArgs.BasicProperties, eventArgs.Exchange, eventArgs.RoutingKey, timeoutMilliseconds);
+            await _producingService.SendAsync(eventArgs.Body, properties, eventArgs.Exchange, eventArgs.RoutingKey, timeoutMilliseconds);
             _loggingService.LogInformation("The failed message has been re-queued");
         }
     }

@@ -62,14 +62,16 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Tests.UnitTests
                 orderingModels,
                 messageHandlers,
                 asyncMessageHandlers);
-            
-            var eventArgs = new BasicDeliverEventArgs
-            {
-                Exchange = testDataModel.MessageExchange,
-                RoutingKey = testDataModel.MessageRoutingKey,
-                Body = Array.Empty<byte>()
-            };
-            var context = new MessageHandlingContext(eventArgs, _ => { }, false);
+
+            var eventArgs = new BasicDeliverEventArgs(
+                "consumerTag",
+                0,
+                false,
+                testDataModel.MessageExchange,
+                testDataModel.MessageRoutingKey,
+                null,
+                Array.Empty<byte>());
+            var context = new MessageHandlingContext(eventArgs, _ => Task.CompletedTask, _ => Task.CompletedTask, false);
             await service.HandleMessageReceivingEvent(context);
 
             var messageHandlerTimes = testDataModel.MessageHandlerShouldTrigger ? Times.Once() : Times.Never();
