@@ -9,8 +9,6 @@ namespace Examples.ConsumerHost
     {
         private readonly ILogger<CustomMessageHandler> _logger;
 
-        public ushort? PrefetchCount => 5;
-
         public CustomMessageHandler(ILogger<CustomMessageHandler> logger)
         {
             _logger = logger;
