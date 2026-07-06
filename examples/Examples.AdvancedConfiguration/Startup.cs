@@ -39,7 +39,7 @@ namespace Examples.AdvancedConfiguration
                 .AddProductionExchange("exchange.to.send.messages.only", producingExchangeSection)
                 .AddConsumptionExchange("consumption.exchange", consumingExchangeSection)
                 .AddMessageHandlerTransient<CustomMessageHandler>("routing.key")
-                .AddAsyncMessageHandlerTransient<CustomAsyncMessageHandler>(new[] { "routing.key", "another.routing.key" })
+                .AddAsyncMessageHandlerTransient<CustomAsyncMessageHandler>(new[] { "routing.key", "another.routing.key" }, prefetchCount: 10)
                 .AddBatchMessageHandler<ConsumingWithScopeBatchMessageHandler>(consumingExchangeSection)
                 .AddBatchMessageHandler<ConsumingWithProviderBatchMessageHandler>(consumingExchangeSection);
         }

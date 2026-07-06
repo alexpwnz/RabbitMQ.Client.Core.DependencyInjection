@@ -6,8 +6,6 @@ namespace Examples.AdvancedConfiguration.MessageHandlers
 {
     public class CustomAsyncMessageHandler : IAsyncMessageHandler
     {
-        public ushort? PrefetchCount => 10;
-
         public async Task Handle(MessageHandlingContext context, string matchingRoute)
         {
             // The message handler does not do anything.

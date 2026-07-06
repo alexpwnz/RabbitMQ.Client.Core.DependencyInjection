@@ -5,8 +5,6 @@ namespace Examples.AdvancedConfiguration.MessageHandlers
 {
     public class CustomMessageHandler : IMessageHandler
     {
-        public ushort? PrefetchCount => null;
-
         public void Handle(MessageHandlingContext context, string matchingRoute)
         {
             // The message handler does not do anything.

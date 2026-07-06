@@ -20,6 +20,7 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Services
         private readonly IRabbitMqConnectionFactory _rabbitMqConnectionFactory;
         private readonly IEnumerable<RabbitMqExchange> _exchanges;
         private readonly IEnumerable<MessageHandlerRouter> _routers;
+        private readonly IEnumerable<MessageHandlerRegistrationOptions> _registrationOptions;
         private readonly IEnumerable<IMessageHandler> _messageHandlers;
         private readonly IEnumerable<IAsyncMessageHandler> _asyncMessageHandlers;
         private readonly ILoggingService _loggingService;
@@ -32,6 +33,7 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Services
             IOptions<RabbitMqConnectionOptions> connectionOptions,
             IEnumerable<RabbitMqExchange> exchanges,
             IEnumerable<MessageHandlerRouter> routers,
+            IEnumerable<MessageHandlerRegistrationOptions> registrationOptions,
             IEnumerable<IMessageHandler> messageHandlers,
             IEnumerable<IAsyncMessageHandler> asyncMessageHandlers,
             ILoggingService loggingService,
@@ -43,6 +45,7 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Services
             _connectionOptions = connectionOptions.Value;
             _exchanges = exchanges;
             _routers = routers;
+            _registrationOptions = registrationOptions;
             _messageHandlers = messageHandlers;
             _asyncMessageHandlers = asyncMessageHandlers;
             _loggingService = loggingService;
@@ -122,7 +125,8 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Services
                             routingKey: route).ConfigureAwait(false);
                     }
 
-                    var channel = await CreateChannelAsync(connection, _connectionOptions.ConsumerOptions, handler.PrefetchCount).ConfigureAwait(false);
+                    var prefetchCount = GetPrefetchCount(handlerType);
+                    var channel = await CreateChannelAsync(connection, _connectionOptions.ConsumerOptions, prefetchCount).ConfigureAwait(false);
                     var consumer = _rabbitMqConnectionFactory.CreateConsumer(channel);
 
                     var handlerConsumer = new HandlerConsumerChannel(
@@ -171,7 +175,8 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Services
                                 routingKey: route).ConfigureAwait(false);
                         }
 
-                        var channel = await CreateChannelAsync(connection, _connectionOptions.ConsumerOptions, handler.PrefetchCount).ConfigureAwait(false);
+                        var prefetchCount = GetPrefetchCount(handlerType);
+                        var channel = await CreateChannelAsync(connection, _connectionOptions.ConsumerOptions, prefetchCount).ConfigureAwait(false);
                         var consumer = _rabbitMqConnectionFactory.CreateConsumer(channel);
 
                         var handlerConsumer = new HandlerConsumerChannel(
@@ -189,6 +194,9 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Services
                 }
             }
         }
+
+        private ushort? GetPrefetchCount(Type handlerType) =>
+            _registrationOptions.FirstOrDefault(r => r.HandlerType == handlerType)?.PrefetchCount;
 
         private IBaseMessageHandler? ResolveHandler(Type handlerType)
         {

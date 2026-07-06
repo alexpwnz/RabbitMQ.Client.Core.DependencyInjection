@@ -11,8 +11,6 @@ namespace Examples.ManualAck.MessageHandlers
     {
         private readonly IProducingService _producingService;
 
-        public ushort? PrefetchCount => null;
-
         public CustomMessageHandler(IProducingService producingService)
         {
             _producingService = producingService;

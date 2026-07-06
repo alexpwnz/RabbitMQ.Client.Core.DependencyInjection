@@ -12,17 +12,17 @@ namespace RabbitMQ.Client.Core.DependencyInjection.InternalExtensions
     /// </summary>
     internal static class BaseMessageHandlerDependencyInjectionExtensions
     {
-        internal static IServiceCollection AddInstanceTransient<TInterface, TImplementation>(this IServiceCollection services, IEnumerable<string> routePatterns, int order)
+        internal static IServiceCollection AddInstanceTransient<TInterface, TImplementation>(this IServiceCollection services, IEnumerable<string> routePatterns, int order, ushort? prefetchCount = null)
             where TInterface : class
             where TImplementation : class, TInterface =>
-            services.AddInstanceTransient<TInterface, TImplementation>(routePatterns, null, order);
+            services.AddInstanceTransient<TInterface, TImplementation>(routePatterns, null, order, prefetchCount);
 
-        internal static IServiceCollection AddInstanceSingleton<TInterface, TImplementation>(this IServiceCollection services, IEnumerable<string> routePatterns, int order)
+        internal static IServiceCollection AddInstanceSingleton<TInterface, TImplementation>(this IServiceCollection services, IEnumerable<string> routePatterns, int order, ushort? prefetchCount = null)
             where TInterface : class
             where TImplementation : class, TInterface =>
-            services.AddInstanceSingleton<TInterface, TImplementation>(routePatterns, null, order);
+            services.AddInstanceSingleton<TInterface, TImplementation>(routePatterns, null, order, prefetchCount);
 
-        internal static IServiceCollection AddInstanceTransient<TInterface, TImplementation>(this IServiceCollection services, IEnumerable<string> routePatterns, string? exchange, int order)
+        internal static IServiceCollection AddInstanceTransient<TInterface, TImplementation>(this IServiceCollection services, IEnumerable<string> routePatterns, string? exchange, int order, ushort? prefetchCount = null)
             where TInterface : class
             where TImplementation : class, TInterface
         {
@@ -30,10 +30,12 @@ namespace RabbitMQ.Client.Core.DependencyInjection.InternalExtensions
             services.AddTransient<TInterface, TImplementation>();
             var router = new MessageHandlerRouter(typeof(TImplementation), exchange, patterns);
             services.Add(new ServiceDescriptor(typeof(MessageHandlerRouter), router));
+            var options = new MessageHandlerRegistrationOptions(typeof(TImplementation), prefetchCount);
+            services.AddSingleton(options);
             return services.AddMessageHandlerOrderingModel<TImplementation>(patterns, exchange, order);
         }
 
-        internal static IServiceCollection AddInstanceSingleton<TInterface, TImplementation>(this IServiceCollection services, IEnumerable<string> routePatterns, string? exchange, int order)
+        internal static IServiceCollection AddInstanceSingleton<TInterface, TImplementation>(this IServiceCollection services, IEnumerable<string> routePatterns, string? exchange, int order, ushort? prefetchCount = null)
             where TInterface : class
             where TImplementation : class, TInterface
         {
@@ -41,6 +43,8 @@ namespace RabbitMQ.Client.Core.DependencyInjection.InternalExtensions
             services.AddSingleton<TInterface, TImplementation>();
             var router = new MessageHandlerRouter(typeof(TImplementation), exchange, patterns);
             services.Add(new ServiceDescriptor(typeof(MessageHandlerRouter), router));
+            var options = new MessageHandlerRegistrationOptions(typeof(TImplementation), prefetchCount);
+            services.AddSingleton(options);
             return services.AddMessageHandlerOrderingModel<TImplementation>(patterns, exchange, order);
         }
 

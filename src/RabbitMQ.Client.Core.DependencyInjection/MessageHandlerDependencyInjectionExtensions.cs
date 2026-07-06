@@ -18,9 +18,9 @@ namespace RabbitMQ.Client.Core.DependencyInjection
         /// <param name="services">Service collection.</param>
         /// <param name="routePattern">Route pattern.</param>
         /// <returns>Service collection.</returns>
-        public static IServiceCollection AddMessageHandlerTransient<T>(this IServiceCollection services, string routePattern)
+        public static IServiceCollection AddMessageHandlerTransient<T>(this IServiceCollection services, string routePattern, ushort? prefetchCount = null)
             where T : class, IMessageHandler =>
-            services.AddInstanceTransient<IMessageHandler, T>(new[] { routePattern }.ToList(), 0);
+            services.AddInstanceTransient<IMessageHandler, T>(new[] { routePattern }.ToList(), 0, prefetchCount);
 
         /// <summary>
         /// Add a transient message handler.
@@ -29,9 +29,9 @@ namespace RabbitMQ.Client.Core.DependencyInjection
         /// <param name="services">Service collection.</param>
         /// <param name="routePatterns">Route patterns.</param>
         /// <returns>Service collection.</returns>
-        public static IServiceCollection AddMessageHandlerTransient<T>(this IServiceCollection services, IEnumerable<string> routePatterns)
+        public static IServiceCollection AddMessageHandlerTransient<T>(this IServiceCollection services, IEnumerable<string> routePatterns, ushort? prefetchCount = null)
             where T : class, IMessageHandler =>
-            services.AddInstanceTransient<IMessageHandler, T>(routePatterns.ToList(), 0);
+            services.AddInstanceTransient<IMessageHandler, T>(routePatterns.ToList(), 0, prefetchCount);
 
         /// <summary>
         /// Add a transient message handler.
@@ -41,9 +41,9 @@ namespace RabbitMQ.Client.Core.DependencyInjection
         /// <param name="routePattern">Route pattern.</param>
         /// <param name="order">Message handler order.</param>
         /// <returns>Service collection.</returns>
-        public static IServiceCollection AddMessageHandlerTransient<T>(this IServiceCollection services, string routePattern, int order)
+        public static IServiceCollection AddMessageHandlerTransient<T>(this IServiceCollection services, string routePattern, int order, ushort? prefetchCount = null)
             where T : class, IMessageHandler =>
-            services.AddInstanceTransient<IMessageHandler, T>(new[] { routePattern }.ToList(), order);
+            services.AddInstanceTransient<IMessageHandler, T>(new[] { routePattern }.ToList(), order, prefetchCount);
 
         /// <summary>
         /// Add a transient message handler.
@@ -53,9 +53,9 @@ namespace RabbitMQ.Client.Core.DependencyInjection
         /// <param name="routePatterns">Route patterns.</param>
         /// <param name="order">Message handler order.</param>
         /// <returns>Service collection.</returns>
-        public static IServiceCollection AddMessageHandlerTransient<T>(this IServiceCollection services, IEnumerable<string> routePatterns, int order)
+        public static IServiceCollection AddMessageHandlerTransient<T>(this IServiceCollection services, IEnumerable<string> routePatterns, int order, ushort? prefetchCount = null)
             where T : class, IMessageHandler =>
-            services.AddInstanceTransient<IMessageHandler, T>(routePatterns.ToList(), order);
+            services.AddInstanceTransient<IMessageHandler, T>(routePatterns.ToList(), order, prefetchCount);
 
         /// <summary>
         /// Add a singleton message handler.
@@ -64,9 +64,9 @@ namespace RabbitMQ.Client.Core.DependencyInjection
         /// <param name="services">Service collection.</param>
         /// <param name="routePattern">Route pattern.</param>
         /// <returns>Service collection.</returns>
-        public static IServiceCollection AddMessageHandlerSingleton<T>(this IServiceCollection services, string routePattern)
+        public static IServiceCollection AddMessageHandlerSingleton<T>(this IServiceCollection services, string routePattern, ushort? prefetchCount = null)
             where T : class, IMessageHandler =>
-            services.AddInstanceSingleton<IMessageHandler, T>(new[] { routePattern }.ToList(), 0);
+            services.AddInstanceSingleton<IMessageHandler, T>(new[] { routePattern }.ToList(), 0, prefetchCount);
 
         /// <summary>
         /// Add a singleton message handler.
@@ -75,9 +75,9 @@ namespace RabbitMQ.Client.Core.DependencyInjection
         /// <param name="services">Service collection.</param>
         /// <param name="routePatterns">Route patterns.</param>
         /// <returns>Service collection.</returns>
-        public static IServiceCollection AddMessageHandlerSingleton<T>(this IServiceCollection services, IEnumerable<string> routePatterns)
+        public static IServiceCollection AddMessageHandlerSingleton<T>(this IServiceCollection services, IEnumerable<string> routePatterns, ushort? prefetchCount = null)
             where T : class, IMessageHandler =>
-            services.AddInstanceSingleton<IMessageHandler, T>(routePatterns.ToList(), 0);
+            services.AddInstanceSingleton<IMessageHandler, T>(routePatterns.ToList(), 0, prefetchCount);
 
         /// <summary>
         /// Add a singleton message handler.
@@ -87,9 +87,9 @@ namespace RabbitMQ.Client.Core.DependencyInjection
         /// <param name="routePattern">Route pattern.</param>
         /// <param name="order">Message handler order.</param>
         /// <returns>Service collection.</returns>
-        public static IServiceCollection AddMessageHandlerSingleton<T>(this IServiceCollection services, string routePattern, int order)
+        public static IServiceCollection AddMessageHandlerSingleton<T>(this IServiceCollection services, string routePattern, int order, ushort? prefetchCount = null)
             where T : class, IMessageHandler =>
-            services.AddInstanceSingleton<IMessageHandler, T>(new[] { routePattern }.ToList(), order);
+            services.AddInstanceSingleton<IMessageHandler, T>(new[] { routePattern }.ToList(), order, prefetchCount);
 
         /// <summary>
         /// Add a singleton message handler.
@@ -99,9 +99,9 @@ namespace RabbitMQ.Client.Core.DependencyInjection
         /// <param name="routePatterns">Route patterns.</param>
         /// <param name="order">Message handler order.</param>
         /// <returns>Service collection.</returns>
-        public static IServiceCollection AddMessageHandlerSingleton<T>(this IServiceCollection services, IEnumerable<string> routePatterns, int order)
+        public static IServiceCollection AddMessageHandlerSingleton<T>(this IServiceCollection services, IEnumerable<string> routePatterns, int order, ushort? prefetchCount = null)
             where T : class, IMessageHandler =>
-            services.AddInstanceSingleton<IMessageHandler, T>(routePatterns.ToList(), order);
+            services.AddInstanceSingleton<IMessageHandler, T>(routePatterns.ToList(), order, prefetchCount);
 
         /// <summary>
         /// Add a transient message handler.
@@ -111,9 +111,9 @@ namespace RabbitMQ.Client.Core.DependencyInjection
         /// <param name="routePattern">Route pattern.</param>
         /// <param name="exchange">An exchange which will be "listened".</param>
         /// <returns>Service collection.</returns>
-        public static IServiceCollection AddMessageHandlerTransient<T>(this IServiceCollection services, string routePattern, string exchange)
+        public static IServiceCollection AddMessageHandlerTransient<T>(this IServiceCollection services, string routePattern, string exchange, ushort? prefetchCount = null)
             where T : class, IMessageHandler =>
-            services.AddInstanceTransient<IMessageHandler, T>(new[] { routePattern }.ToList(), exchange, 0);
+            services.AddInstanceTransient<IMessageHandler, T>(new[] { routePattern }.ToList(), exchange, 0, prefetchCount);
 
         /// <summary>
         /// Add a transient message handler.
@@ -123,9 +123,9 @@ namespace RabbitMQ.Client.Core.DependencyInjection
         /// <param name="routePatterns">Route patterns.</param>
         /// <param name="exchange">An exchange which will be "listened".</param>
         /// <returns>Service collection.</returns>
-        public static IServiceCollection AddMessageHandlerTransient<T>(this IServiceCollection services, IEnumerable<string> routePatterns, string exchange)
+        public static IServiceCollection AddMessageHandlerTransient<T>(this IServiceCollection services, IEnumerable<string> routePatterns, string exchange, ushort? prefetchCount = null)
             where T : class, IMessageHandler =>
-            services.AddInstanceTransient<IMessageHandler, T>(routePatterns.ToList(), exchange, 0);
+            services.AddInstanceTransient<IMessageHandler, T>(routePatterns.ToList(), exchange, 0, prefetchCount);
 
         /// <summary>
         /// Add a transient message handler.
@@ -136,9 +136,9 @@ namespace RabbitMQ.Client.Core.DependencyInjection
         /// <param name="exchange">An exchange which will be "listened".</param>
         /// <param name="order">Message handler order.</param>
         /// <returns>Service collection.</returns>
-        public static IServiceCollection AddMessageHandlerTransient<T>(this IServiceCollection services, string routePattern, string exchange, int order)
+        public static IServiceCollection AddMessageHandlerTransient<T>(this IServiceCollection services, string routePattern, string exchange, int order, ushort? prefetchCount = null)
             where T : class, IMessageHandler =>
-            services.AddInstanceTransient<IMessageHandler, T>(new[] { routePattern }.ToList(), exchange, order);
+            services.AddInstanceTransient<IMessageHandler, T>(new[] { routePattern }.ToList(), exchange, order, prefetchCount);
 
         /// <summary>
         /// Add a transient message handler.
@@ -149,9 +149,9 @@ namespace RabbitMQ.Client.Core.DependencyInjection
         /// <param name="exchange">An exchange which will be "listened".</param>
         /// <param name="order">Message handler order.</param>
         /// <returns>Service collection.</returns>
-        public static IServiceCollection AddMessageHandlerTransient<T>(this IServiceCollection services, IEnumerable<string> routePatterns, string exchange, int order)
+        public static IServiceCollection AddMessageHandlerTransient<T>(this IServiceCollection services, IEnumerable<string> routePatterns, string exchange, int order, ushort? prefetchCount = null)
             where T : class, IMessageHandler =>
-            services.AddInstanceTransient<IMessageHandler, T>(routePatterns.ToList(), exchange, order);
+            services.AddInstanceTransient<IMessageHandler, T>(routePatterns.ToList(), exchange, order, prefetchCount);
 
         /// <summary>
         /// Add a singleton message handler.
@@ -161,9 +161,9 @@ namespace RabbitMQ.Client.Core.DependencyInjection
         /// <param name="routePattern">Route pattern.</param>
         /// <param name="exchange">An exchange which will be "listened".</param>
         /// <returns>Service collection.</returns>
-        public static IServiceCollection AddMessageHandlerSingleton<T>(this IServiceCollection services, string routePattern, string exchange)
+        public static IServiceCollection AddMessageHandlerSingleton<T>(this IServiceCollection services, string routePattern, string exchange, ushort? prefetchCount = null)
             where T : class, IMessageHandler =>
-            services.AddInstanceSingleton<IMessageHandler, T>(new[] { routePattern }.ToList(), exchange, 0);
+            services.AddInstanceSingleton<IMessageHandler, T>(new[] { routePattern }.ToList(), exchange, 0, prefetchCount);
 
         /// <summary>
         /// Add a singleton message handler.
@@ -173,9 +173,9 @@ namespace RabbitMQ.Client.Core.DependencyInjection
         /// <param name="routePatterns">Route patterns.</param>
         /// <param name="exchange">An exchange which will be "listened".</param>
         /// <returns>Service collection.</returns>
-        public static IServiceCollection AddMessageHandlerSingleton<T>(this IServiceCollection services, IEnumerable<string> routePatterns, string exchange)
+        public static IServiceCollection AddMessageHandlerSingleton<T>(this IServiceCollection services, IEnumerable<string> routePatterns, string exchange, ushort? prefetchCount = null)
             where T : class, IMessageHandler =>
-            services.AddInstanceSingleton<IMessageHandler, T>(routePatterns.ToList(), exchange, 0);
+            services.AddInstanceSingleton<IMessageHandler, T>(routePatterns.ToList(), exchange, 0, prefetchCount);
 
         /// <summary>
         /// Add a singleton message handler.
@@ -186,9 +186,9 @@ namespace RabbitMQ.Client.Core.DependencyInjection
         /// <param name="exchange">An exchange which will be "listened".</param>
         /// <param name="order">Message handler order.</param>
         /// <returns>Service collection.</returns>
-        public static IServiceCollection AddMessageHandlerSingleton<T>(this IServiceCollection services, string routePattern, string exchange, int order)
+        public static IServiceCollection AddMessageHandlerSingleton<T>(this IServiceCollection services, string routePattern, string exchange, int order, ushort? prefetchCount = null)
             where T : class, IMessageHandler =>
-            services.AddInstanceSingleton<IMessageHandler, T>(new[] { routePattern }.ToList(), exchange, order);
+            services.AddInstanceSingleton<IMessageHandler, T>(new[] { routePattern }.ToList(), exchange, order, prefetchCount);
 
         /// <summary>
         /// Add a singleton message handler.
@@ -199,8 +199,8 @@ namespace RabbitMQ.Client.Core.DependencyInjection
         /// <param name="exchange">An exchange which will be "listened".</param>
         /// <param name="order">Message handler order.</param>
         /// <returns>Service collection.</returns>
-        public static IServiceCollection AddMessageHandlerSingleton<T>(this IServiceCollection services, IEnumerable<string> routePatterns, string exchange, int order)
+        public static IServiceCollection AddMessageHandlerSingleton<T>(this IServiceCollection services, IEnumerable<string> routePatterns, string exchange, int order, ushort? prefetchCount = null)
             where T : class, IMessageHandler =>
-            services.AddInstanceSingleton<IMessageHandler, T>(routePatterns.ToList(), exchange, order);
+            services.AddInstanceSingleton<IMessageHandler, T>(routePatterns.ToList(), exchange, order, prefetchCount);
     }
 }

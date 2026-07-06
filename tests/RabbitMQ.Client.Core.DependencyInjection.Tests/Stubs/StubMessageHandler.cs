@@ -12,8 +12,6 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Tests.Stubs
             _caller = caller;
         }
 
-        public ushort? PrefetchCount => null;
-
         public void Handle(MessageHandlingContext context, string matchingRoute)
         {
             _caller.Call($"{context.Message.GetMessage()}:{matchingRoute}");
