@@ -315,7 +315,7 @@ services.AddRabbitMqClient(clientConfiguration)
         queueName: "myqueue");
 ```
 
-The `queueName` parameter is available on all exchange-specific overloads of `AddMessageHandlerTransient`, `AddMessageHandlerSingleton`, `AddAsyncMessageHandlerTransient`, and `AddAsyncMessageHandlerSingleton`. It is ignored for general handlers (registered without an exchange parameter).
+The `queueName` parameter is available on all overloads of `AddMessageHandlerTransient`, `AddMessageHandlerSingleton`, `AddAsyncMessageHandlerTransient`, and `AddAsyncMessageHandlerSingleton`. For general handlers (registered without an exchange parameter), the queue name becomes `{queueName}_{ExchangeName}_handler` — the provided name is used as the base instead of the handler's full type name.
 
 You can also set multiple message handlers for managing messages received by one routing key. This case can happen when you want to divide responsibilities between services (e.g. one contains business logic, and the other writes messages in the database).
 

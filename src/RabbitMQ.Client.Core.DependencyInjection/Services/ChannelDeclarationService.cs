@@ -158,7 +158,8 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Services
                     {
                         var exchangeName = consumerExchange.Name;
                         var exchangeOptions = consumerExchange.Options;
-                        var queueName = $"{handlerType.FullName}_{exchangeName}_handler";
+                        var baseName = router.QueueName ?? handlerType.FullName;
+                        var queueName = $"{baseName}_{exchangeName}_handler";
 
                         await tempChannel.QueueDeclareAsync(
                             queue: queueName,
