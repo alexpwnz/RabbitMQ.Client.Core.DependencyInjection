@@ -2,6 +2,12 @@
 
 All notable changes to this library will be documented in this file.
 
+## [6.1.1] - 2026-07-09
+
+### Added
+
+- **`queueName` parameter for all message handler overloads** including general handlers (registered without an exchange). Previously the parameter was only available on exchange-specific overloads. For general handlers, the queue name becomes `{queueName}_{ExchangeName}_handler`.
+
 ## [6.1.0] - 2026-07-09
 
 ### Added
