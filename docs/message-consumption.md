@@ -109,7 +109,7 @@ The second step is to define classes that will take responsibility of handling r
 Each registered message handler receives its own **dedicated RabbitMQ channel, queue, and consumer**. This means:
 
 - Every handler has its own independent channel with its own prefetch count (QoS) setting.
-- A dedicated queue is created per handler per consumption exchange, named `{FullTypeName}_{ExchangeName}_handler`.
+- A dedicated queue is created per handler per consumption exchange. By default, the queue is named `{FullTypeName}_{ExchangeName}_handler`, but you can override it by specifying the `queueName` parameter.
 - The handler's routing keys are used to bind this queue to the exchange.
 - Messages are dispatched directly to the handler through the middleware pipeline, bypassing runtime routing.
 
@@ -154,14 +154,14 @@ public class CustomMessageHandler : IMessageHandler
 
 #### Per-handler PrefetchCount
 
-Every handler can optionally override the global consumer prefetch count by implementing the `PrefetchCount` property from `IBaseMessageHandler`. When set to a non-null value, it overrides `RabbitMqServiceOptions.PrefetchCount` (default 15) for that handler's dedicated channel.
+Every handler can optionally override the global consumer prefetch count by implementing the `PrefetchCount` property from `IBaseMessageHandler`. When set to a non-null value, it overrides `RabbitMqServiceOptions.PrefetchCount` (default 16) for that handler's dedicated channel.
 
 ```c#
 public class CustomMessageHandler : IMessageHandler
 {
     readonly ILogger<CustomMessageHandler> _logger;
 
-    // This handler will use PrefetchCount = 5 instead of the global default (15).
+    // This handler will use PrefetchCount = 5 instead of the global default (16).
     public ushort? PrefetchCount => 5;
 
     public CustomMessageHandler(ILogger<CustomMessageHandler> logger)
@@ -301,6 +301,22 @@ services.AddRabbitMqClient(clientConfiguration)
     .AddMessageHandlerSingleton<AnotherCustomMessageHandler>("routing.key", "ExchangeName");
 ```
 
+#### Custom queue name for a handler
+
+By default, each handler gets an auto-generated queue name: `{FullTypeName}_{ExchangeName}_handler`. You can override this by passing the `queueName` parameter. This is useful when you want to use a queue name defined in your `appsettings.json` or when you need a stable, predictable queue name that doesn't change if the handler class is renamed.
+
+```c#
+// The queue will be named "myqueue" instead of "{FullTypeName}_{ExchangeName}_handler"
+services.AddRabbitMqClient(clientConfiguration)
+    .AddExchange("ExchangeName", isConsuming: true, exchangeConfiguration)
+    .AddMessageHandlerSingleton<CustomMessageHandler>(
+        "routing.key",
+        "ExchangeName",
+        queueName: "myqueue");
+```
+
+The `queueName` parameter is available on all exchange-specific overloads of `AddMessageHandlerTransient`, `AddMessageHandlerSingleton`, `AddAsyncMessageHandlerTransient`, and `AddAsyncMessageHandlerSingleton`. It is ignored for general handlers (registered without an exchange parameter).
+
 You can also set multiple message handlers for managing messages received by one routing key. This case can happen when you want to divide responsibilities between services (e.g. one contains business logic, and the other writes messages in the database).
 
 ```c#
@@ -338,7 +354,7 @@ services.AddRabbitMqClient(clientConfiguration)
 
 The message handling process is organized as follows:
 
-- `ChannelDeclarationService` creates a dedicated RabbitMQ channel, queue, and consumer for each registered handler. A global prefetch count (`RabbitMqServiceOptions.PrefetchCount`, default 15) is applied to all consumer channels, unless a handler provides its own `PrefetchCount` override.
+- `ChannelDeclarationService` creates a dedicated RabbitMQ channel, queue, and consumer for each registered handler. A global prefetch count (`RabbitMqServiceOptions.PrefetchCount`, default 16) is applied to all consumer channels, unless a handler provides its own `PrefetchCount` override.
 - When a message arrives on a handler's queue, the consumer's `ReceivedAsync` event fires.
 - `ConsumingService` catches the event, deserializes the event args into a `MessageHandlingContext`, and delegates it to `IMessageHandlingPipelineExecutingService`.
 - The pipeline service runs all registered middlewares and then calls the specific handler's `Handle` method.

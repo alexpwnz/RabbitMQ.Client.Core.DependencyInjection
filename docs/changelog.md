@@ -2,6 +2,16 @@
 
 All notable changes to this library will be documented in this file.
 
+## [6.1.0] - 2026-07-09
+
+### Added
+
+- **Optional `queueName` parameter** for exchange-specific message handler registration methods (`AddMessageHandlerTransient`, `AddMessageHandlerSingleton`, `AddAsyncMessageHandlerTransient`, `AddAsyncMessageHandlerSingleton`). When specified, the parameter value is used as the queue name instead of the auto-generated `{FullTypeName}_{ExchangeName}_handler` name.
+
+### Fixed
+
+- **Default `PrefetchCount`** in `RabbitMqServiceOptions` changed from 15 to 16 to match RabbitMQ.Client's default prefetch count.
+
 ## [5.0.0] - 2025-06-10
 
 ### Added

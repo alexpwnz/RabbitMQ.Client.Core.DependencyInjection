@@ -22,26 +22,26 @@ namespace RabbitMQ.Client.Core.DependencyInjection.InternalExtensions
             where TImplementation : class, TInterface =>
             services.AddInstanceSingleton<TInterface, TImplementation>(routePatterns, null, order, prefetchCount);
 
-        internal static IServiceCollection AddInstanceTransient<TInterface, TImplementation>(this IServiceCollection services, IEnumerable<string> routePatterns, string? exchange, int order, ushort? prefetchCount = null)
+        internal static IServiceCollection AddInstanceTransient<TInterface, TImplementation>(this IServiceCollection services, IEnumerable<string> routePatterns, string? exchange, int order, ushort? prefetchCount = null, string? queueName = null)
             where TInterface : class
             where TImplementation : class, TInterface
         {
             var patterns = routePatterns.ToList();
             services.AddTransient<TInterface, TImplementation>();
-            var router = new MessageHandlerRouter(typeof(TImplementation), exchange, patterns);
+            var router = new MessageHandlerRouter(typeof(TImplementation), exchange, patterns, queueName);
             services.Add(new ServiceDescriptor(typeof(MessageHandlerRouter), router));
             var options = new MessageHandlerRegistrationOptions(typeof(TImplementation), prefetchCount);
             services.AddSingleton(options);
             return services.AddMessageHandlerOrderingModel<TImplementation>(patterns, exchange, order);
         }
 
-        internal static IServiceCollection AddInstanceSingleton<TInterface, TImplementation>(this IServiceCollection services, IEnumerable<string> routePatterns, string? exchange, int order, ushort? prefetchCount = null)
+        internal static IServiceCollection AddInstanceSingleton<TInterface, TImplementation>(this IServiceCollection services, IEnumerable<string> routePatterns, string? exchange, int order, ushort? prefetchCount = null, string? queueName = null)
             where TInterface : class
             where TImplementation : class, TInterface
         {
             var patterns = routePatterns.ToList();
             services.AddSingleton<TInterface, TImplementation>();
-            var router = new MessageHandlerRouter(typeof(TImplementation), exchange, patterns);
+            var router = new MessageHandlerRouter(typeof(TImplementation), exchange, patterns, queueName);
             services.Add(new ServiceDescriptor(typeof(MessageHandlerRouter), router));
             var options = new MessageHandlerRegistrationOptions(typeof(TImplementation), prefetchCount);
             services.AddSingleton(options);

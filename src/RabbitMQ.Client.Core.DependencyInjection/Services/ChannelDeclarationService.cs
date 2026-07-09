@@ -102,7 +102,7 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Services
 
                     var exchange = router.Exchange!;
                     var routingKeys = router.RoutePatterns.ToList();
-                    var queueName = $"{handlerType.FullName}_{exchange}_handler";
+                    var queueName = router.QueueName ?? $"{handlerType.FullName}_{exchange}_handler";
 
                     var exchangeOptions = consumerExchanges.FirstOrDefault(x => x.Name == exchange)?.Options;
                     if (exchangeOptions is null)

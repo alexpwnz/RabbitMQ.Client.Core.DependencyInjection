@@ -8,13 +8,14 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Models
     /// </summary>
     public class MessageHandlerRouter
     {
-        public MessageHandlerRouter(Type type, string? exchange, IList<string> routePatterns)
+        public MessageHandlerRouter(Type type, string? exchange, IList<string> routePatterns, string? queueName = null)
         {
             Type = type;
             Exchange = exchange;
             RoutePatterns = routePatterns;
+            QueueName = queueName;
         }
-        
+
         /// <summary>
         /// Message Handler Type
         /// </summary>
@@ -28,11 +29,16 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Models
         /// (it will listen all messages regardless of an exchange).
         /// </remarks>
         public string? Exchange { get; }
-        
+
         /// <summary>
         /// Collection of route patterns (routing keys) that handler will be "listening".
         /// </summary>
         public IList<string> RoutePatterns { get; }
+
+        /// <summary>
+        /// Optional queue name. If set, overrides the auto-generated queue name.
+        /// </summary>
+        public string? QueueName { get; }
 
         /// <summary>
         /// Flag is the message handler general.
