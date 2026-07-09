@@ -96,8 +96,8 @@ namespace RabbitMQ.Client.Core.DependencyInjection.Configuration
 
         /// <summary>
         /// Consumer prefetch count (QoS). Limits the number of unacknowledged messages on the consumer.
-        /// Only affects consumer channels. Default is 15.
+        /// Only affects consumer channels. Default is 16.
         /// </summary>
-        public ushort PrefetchCount { get; set; } = 15;
+        public ushort PrefetchCount { get; set; } = 16;
     }
 }
